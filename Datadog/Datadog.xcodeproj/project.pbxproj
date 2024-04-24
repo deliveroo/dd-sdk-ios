@@ -576,6 +576,7 @@
 		A7F773DE29253F8B00AC1A62 /* OTelHTTPHeadersWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7F773DB29253F8B00AC1A62 /* OTelHTTPHeadersWriter.swift */; };
 		A7F773DF29253F8B00AC1A62 /* OTelHTTPHeadersReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7F773DC29253F8B00AC1A62 /* OTelHTTPHeadersReader.swift */; };
 		A7F773E029253F8B00AC1A62 /* OTelHTTPHeadersReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7F773DC29253F8B00AC1A62 /* OTelHTTPHeadersReader.swift */; };
+		A8652BCA2BD99C5B00C69431 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A8652BC92BD99C5B00C69431 /* PrivacyInfo.xcprivacy */; };
 		B3BBBCB2265E71C700943419 /* VitalMemoryReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3BBBCB0265E71C600943419 /* VitalMemoryReader.swift */; };
 		B3BBBCBC265E71D100943419 /* VitalMemoryReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3BBBCBB265E71D100943419 /* VitalMemoryReaderTests.swift */; };
 		B3FC3C0926526F0000DEED9E /* VitalInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3FC3C0626526EFF00DEED9E /* VitalInfo.swift */; };
@@ -1902,6 +1903,7 @@
 		A7F773D32924EA2D00AC1A62 /* OTelHTTPHeaders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OTelHTTPHeaders.swift; sourceTree = "<group>"; };
 		A7F773DB29253F8B00AC1A62 /* OTelHTTPHeadersWriter.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = OTelHTTPHeadersWriter.swift; sourceTree = "<group>"; };
 		A7F773DC29253F8B00AC1A62 /* OTelHTTPHeadersReader.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = OTelHTTPHeadersReader.swift; sourceTree = "<group>"; };
+		A8652BC92BD99C5B00C69431 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		B3BBBCB0265E71C600943419 /* VitalMemoryReader.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = VitalMemoryReader.swift; sourceTree = "<group>"; };
 		B3BBBCBB265E71D100943419 /* VitalMemoryReaderTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = VitalMemoryReaderTests.swift; sourceTree = "<group>"; };
 		B3FC3C0626526EFF00DEED9E /* VitalInfo.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = VitalInfo.swift; sourceTree = "<group>"; };
@@ -2372,6 +2374,7 @@
 				61D3E0C7277B237D008BE766 /* Kronos */,
 				D2B3F04F282D3A3800C2B5EE /* DatadogCore */,
 				D2B3F050282D3A5700C2B5EE /* DatadogInternal */,
+				A8652BC92BD99C5B00C69431 /* PrivacyInfo.xcprivacy */,
 			);
 			name = Datadog;
 			path = ../Sources/Datadog;
@@ -5180,6 +5183,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A8652BCA2BD99C5B00C69431 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
