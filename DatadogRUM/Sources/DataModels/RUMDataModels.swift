@@ -13,7 +13,7 @@ internal protocol RUMDataModel: Codable {}
 /// Schema of all properties of an Action event
 public struct RUMActionEvent: RUMDataModel {
     /// Internal properties
-    public let dd: DD
+    public var dd: DD
 
     /// Action properties
     public var action: Action
@@ -37,7 +37,7 @@ public struct RUMActionEvent: RUMDataModel {
     public let container: Container?
 
     /// User provided context
-    public internal(set) var context: RUMEventAttributes?
+    public var context: RUMEventAttributes?
 
     /// Start of the event in ms from epoch
     public let date: Int64
@@ -67,7 +67,7 @@ public struct RUMActionEvent: RUMDataModel {
     public let type: String = "action"
 
     /// User properties
-    public internal(set) var usr: RUMUser?
+    public var usr: RUMUser?
 
     /// The version for this application
     public let version: String?
@@ -102,7 +102,7 @@ public struct RUMActionEvent: RUMDataModel {
     /// Internal properties
     public struct DD: Codable {
         /// Action properties
-        public let action: Action?
+        public var action: Action?
 
         /// Browser SDK version
         public let browserSdkVersion: String?
@@ -126,6 +126,9 @@ public struct RUMActionEvent: RUMDataModel {
 
         /// Action properties
         public struct Action: Codable {
+            /// The strategy of how the auto click action name is computed
+            public var nameSource: NameSource?
+
             /// Action position properties
             public let position: Position?
 
@@ -133,8 +136,19 @@ public struct RUMActionEvent: RUMDataModel {
             public let target: Target?
 
             enum CodingKeys: String, CodingKey {
+                case nameSource = "name_source"
                 case position = "position"
                 case target = "target"
+            }
+
+            /// The strategy of how the auto click action name is computed
+            public enum NameSource: String, Codable {
+                case customAttribute = "custom_attribute"
+                case maskPlaceholder = "mask_placeholder"
+                case standardAttribute = "standard_attribute"
+                case textContent = "text_content"
+                case maskDisallowed = "mask_disallowed"
+                case blank = "blank"
             }
 
             /// Action position properties
@@ -358,6 +372,7 @@ public struct RUMActionEvent: RUMDataModel {
             case reactNative = "react-native"
             case roku = "roku"
             case unity = "unity"
+            case kotlinMultiplatform = "kotlin-multiplatform"
         }
 
         /// Attributes of the view's container
@@ -422,6 +437,7 @@ public struct RUMActionEvent: RUMDataModel {
         case reactNative = "react-native"
         case roku = "roku"
         case unity = "unity"
+        case kotlinMultiplatform = "kotlin-multiplatform"
     }
 
     /// View properties
@@ -478,7 +494,7 @@ public struct RUMErrorEvent: RUMDataModel {
     public let container: Container?
 
     /// User provided context
-    public internal(set) var context: RUMEventAttributes?
+    public var context: RUMEventAttributes?
 
     /// Start of the event in ms from epoch
     public let date: Int64
@@ -493,7 +509,7 @@ public struct RUMErrorEvent: RUMDataModel {
     public var error: Error
 
     /// Feature flags properties
-    public internal(set) var featureFlags: FeatureFlags?
+    public var featureFlags: FeatureFlags?
 
     /// Properties of App Hang and ANR errors
     public let freeze: Freeze?
@@ -517,7 +533,7 @@ public struct RUMErrorEvent: RUMDataModel {
     public let type: String = "error"
 
     /// User properties
-    public internal(set) var usr: RUMUser?
+    public var usr: RUMUser?
 
     /// The version for this application
     public let version: String?
@@ -650,6 +666,7 @@ public struct RUMErrorEvent: RUMDataModel {
             case reactNative = "react-native"
             case roku = "roku"
             case unity = "unity"
+            case kotlinMultiplatform = "kotlin-multiplatform"
         }
 
         /// Attributes of the view's container
@@ -698,6 +715,9 @@ public struct RUMErrorEvent: RUMDataModel {
         /// Causes of the error
         public var causes: [Causes]?
 
+        /// Content Security Violation properties
+        public let csp: CSP?
+
         /// Fingerprint used for Error Tracking custom grouping
         public var fingerprint: String?
 
@@ -734,6 +754,9 @@ public struct RUMErrorEvent: RUMDataModel {
         /// Description of each thread in the process when error happened.
         public let threads: [Threads]?
 
+        /// Time since application start when error happened (in milliseconds)
+        public let timeSinceAppStart: Int64?
+
         /// The type of the error
         public let type: String?
 
@@ -744,6 +767,7 @@ public struct RUMErrorEvent: RUMDataModel {
             case binaryImages = "binary_images"
             case category = "category"
             case causes = "causes"
+            case csp = "csp"
             case fingerprint = "fingerprint"
             case handling = "handling"
             case handlingStack = "handling_stack"
@@ -756,6 +780,7 @@ public struct RUMErrorEvent: RUMDataModel {
             case sourceType = "source_type"
             case stack = "stack"
             case threads = "threads"
+            case timeSinceAppStart = "time_since_app_start"
             case type = "type"
             case wasTruncated = "was_truncated"
         }
@@ -795,6 +820,8 @@ public struct RUMErrorEvent: RUMDataModel {
             case aNR = "ANR"
             case appHang = "App Hang"
             case exception = "Exception"
+            case watchdogTermination = "Watchdog Termination"
+            case memoryWarning = "Memory Warning"
         }
 
         /// Properties for one of the error causes
@@ -827,6 +854,22 @@ public struct RUMErrorEvent: RUMDataModel {
                 case agent = "agent"
                 case webview = "webview"
                 case custom = "custom"
+                case report = "report"
+            }
+        }
+
+        /// Content Security Violation properties
+        public struct CSP: Codable {
+            /// In the context of CSP errors, indicates how the violated policy is configured to be treated by the user agent.
+            public let disposition: Disposition?
+
+            enum CodingKeys: String, CodingKey {
+                case disposition = "disposition"
+            }
+
+            /// In the context of CSP errors, indicates how the violated policy is configured to be treated by the user agent.
+            public enum Disposition: String, Codable {
+                case enforce = "enforce"
                 case report = "report"
             }
         }
@@ -979,7 +1022,7 @@ public struct RUMErrorEvent: RUMDataModel {
 
     /// Feature flags properties
     public struct FeatureFlags: Codable {
-        public internal(set) var featureFlagsInfo: [String: Encodable]
+        public var featureFlagsInfo: [String: Encodable]
     }
 
     /// Properties of App Hang and ANR errors
@@ -1019,6 +1062,7 @@ public struct RUMErrorEvent: RUMDataModel {
         case reactNative = "react-native"
         case roku = "roku"
         case unity = "unity"
+        case kotlinMultiplatform = "kotlin-multiplatform"
     }
 
     /// View properties
@@ -1099,7 +1143,7 @@ public struct RUMLongTaskEvent: RUMDataModel {
     public let container: Container?
 
     /// User provided context
-    public internal(set) var context: RUMEventAttributes?
+    public var context: RUMEventAttributes?
 
     /// Start of the event in ms from epoch
     public let date: Int64
@@ -1132,7 +1176,7 @@ public struct RUMLongTaskEvent: RUMDataModel {
     public let type: String = "long_task"
 
     /// User properties
-    public internal(set) var usr: RUMUser?
+    public var usr: RUMUser?
 
     /// The version for this application
     public let version: String?
@@ -1267,6 +1311,7 @@ public struct RUMLongTaskEvent: RUMDataModel {
             case reactNative = "react-native"
             case roku = "roku"
             case unity = "unity"
+            case kotlinMultiplatform = "kotlin-multiplatform"
         }
 
         /// Attributes of the view's container
@@ -1306,19 +1351,112 @@ public struct RUMLongTaskEvent: RUMDataModel {
 
     /// Long Task properties
     public struct LongTask: Codable {
-        /// Duration in ns of the long task
+        /// Duration in ns for which the animation frame was being blocked
+        public let blockingDuration: Int64?
+
+        /// Duration in ns of the long task or long animation frame
         public let duration: Int64
 
-        /// UUID of the long task
+        /// Type of the event: long task or long animation frame
+        public let entryType: EntryType?
+
+        /// Start time of of the first UI event (mouse/keyboard and so on) to be handled during the course of this frame
+        public let firstUiEventTimestamp: Double?
+
+        /// UUID of the long task or long animation frame
         public let id: String?
 
         /// Whether this long task is considered a frozen frame
         public let isFrozenFrame: Bool?
 
+        /// Start time of the rendering cycle, which includes requestAnimationFrame callbacks, style and layout calculation, resize observer and intersection observer callbacks
+        public let renderStart: Double?
+
+        /// A list of long scripts that were executed over the course of the long frame
+        public let scripts: [Scripts]?
+
+        /// Start time of the long animation frame
+        public let startTime: Double?
+
+        /// Start time of the time period spent in style and layout calculations
+        public let styleAndLayoutStart: Double?
+
         enum CodingKeys: String, CodingKey {
+            case blockingDuration = "blocking_duration"
             case duration = "duration"
+            case entryType = "entry_type"
+            case firstUiEventTimestamp = "first_ui_event_timestamp"
             case id = "id"
             case isFrozenFrame = "is_frozen_frame"
+            case renderStart = "render_start"
+            case scripts = "scripts"
+            case startTime = "start_time"
+            case styleAndLayoutStart = "style_and_layout_start"
+        }
+
+        /// Type of the event: long task or long animation frame
+        public enum EntryType: String, Codable {
+            case longTask = "long-task"
+            case longAnimationFrame = "long-animation-frame"
+        }
+
+        public struct Scripts: Codable {
+            /// Duration in ns between startTime and when the subsequent microtask queue has finished processing
+            public let duration: Int64?
+
+            /// Time after compilation
+            public let executionStart: Double?
+
+            /// Duration in ns of the the total time spent processing forced layout and style inside this function
+            public let forcedStyleAndLayoutDuration: Int64?
+
+            /// Information about the invoker of the script
+            public let invoker: String?
+
+            /// Type of the invoker of the script
+            public let invokerType: InvokerType?
+
+            /// Duration in ns of the total time spent in 'pausing' synchronous operations (alert, synchronous XHR)
+            public let pauseDuration: Int64?
+
+            /// The script character position where available (or -1 if not found)
+            public let sourceCharPosition: Int64?
+
+            /// The script function name where available (or empty if not found)
+            public let sourceFunctionName: String?
+
+            /// The script resource name where available (or empty if not found)
+            public let sourceUrl: String?
+
+            /// Time the entry function was invoked
+            public let startTime: Double?
+
+            /// The container (the top-level document, or an <iframe>) the long animation frame occurred in
+            public let windowAttribution: String?
+
+            enum CodingKeys: String, CodingKey {
+                case duration = "duration"
+                case executionStart = "execution_start"
+                case forcedStyleAndLayoutDuration = "forced_style_and_layout_duration"
+                case invoker = "invoker"
+                case invokerType = "invoker_type"
+                case pauseDuration = "pause_duration"
+                case sourceCharPosition = "source_char_position"
+                case sourceFunctionName = "source_function_name"
+                case sourceUrl = "source_url"
+                case startTime = "start_time"
+                case windowAttribution = "window_attribution"
+            }
+
+            /// Type of the invoker of the script
+            public enum InvokerType: String, Codable {
+                case userCallback = "user-callback"
+                case eventListener = "event-listener"
+                case resolvePromise = "resolve-promise"
+                case rejectPromise = "reject-promise"
+                case classicScript = "classic-script"
+                case moduleScript = "module-script"
+            }
         }
     }
 
@@ -1349,6 +1487,7 @@ public struct RUMLongTaskEvent: RUMDataModel {
         case reactNative = "react-native"
         case roku = "roku"
         case unity = "unity"
+        case kotlinMultiplatform = "kotlin-multiplatform"
     }
 
     /// View properties
@@ -1401,7 +1540,7 @@ public struct RUMResourceEvent: RUMDataModel {
     public let container: Container?
 
     /// User provided context
-    public internal(set) var context: RUMEventAttributes?
+    public var context: RUMEventAttributes?
 
     /// Start of the event in ms from epoch
     public let date: Int64
@@ -1434,7 +1573,7 @@ public struct RUMResourceEvent: RUMDataModel {
     public let type: String = "resource"
 
     /// User properties
-    public internal(set) var usr: RUMUser?
+    public var usr: RUMUser?
 
     /// The version for this application
     public let version: String?
@@ -1581,6 +1720,7 @@ public struct RUMResourceEvent: RUMDataModel {
             case reactNative = "react-native"
             case roku = "roku"
             case unity = "unity"
+            case kotlinMultiplatform = "kotlin-multiplatform"
         }
 
         /// Attributes of the view's container
@@ -1623,6 +1763,12 @@ public struct RUMResourceEvent: RUMDataModel {
         /// Connect phase properties
         public let connect: Connect?
 
+        /// Size in octet of the resource after removing any applied encoding
+        public let decodedBodySize: Int64?
+
+        /// Delivery type of the resource
+        public let deliveryType: DeliveryType?
+
         /// DNS phase properties
         public let dns: DNS?
 
@@ -1631,6 +1777,9 @@ public struct RUMResourceEvent: RUMDataModel {
 
         /// Duration of the resource
         public let duration: Int64?
+
+        /// Size in octet of the resource before removing any applied content encodings
+        public let encodedBodySize: Int64?
 
         /// First Byte phase properties
         public let firstByte: FirstByte?
@@ -1644,11 +1793,17 @@ public struct RUMResourceEvent: RUMDataModel {
         /// HTTP method of the resource
         public let method: RUMMethod?
 
+        /// Network protocol used to fetch the resource (e.g., 'http/1.1', 'h2')
+        public let `protocol`: String?
+
         /// The provider for this resource
         public let provider: Provider?
 
         /// Redirect phase properties
         public let redirect: Redirect?
+
+        /// Render blocking status of the resource
+        public let renderBlockingStatus: RenderBlockingStatus?
 
         /// Size in octet of the resource response body
         public let size: Int64?
@@ -1659,28 +1814,41 @@ public struct RUMResourceEvent: RUMDataModel {
         /// HTTP status code of the resource
         public let statusCode: Int64?
 
+        /// Size in octet of the fetched resource
+        public let transferSize: Int64?
+
         /// Resource type
         public let type: ResourceType
 
         /// URL of the resource
         public var url: String
 
+        /// Worker phase properties
+        public let worker: Worker?
+
         enum CodingKeys: String, CodingKey {
             case connect = "connect"
+            case decodedBodySize = "decoded_body_size"
+            case deliveryType = "delivery_type"
             case dns = "dns"
             case download = "download"
             case duration = "duration"
+            case encodedBodySize = "encoded_body_size"
             case firstByte = "first_byte"
             case graphql = "graphql"
             case id = "id"
             case method = "method"
+            case `protocol` = "protocol"
             case provider = "provider"
             case redirect = "redirect"
+            case renderBlockingStatus = "render_blocking_status"
             case size = "size"
             case ssl = "ssl"
             case statusCode = "status_code"
+            case transferSize = "transfer_size"
             case type = "type"
             case url = "url"
+            case worker = "worker"
         }
 
         /// Connect phase properties
@@ -1695,6 +1863,13 @@ public struct RUMResourceEvent: RUMDataModel {
                 case duration = "duration"
                 case start = "start"
             }
+        }
+
+        /// Delivery type of the resource
+        public enum DeliveryType: String, Codable {
+            case cache = "cache"
+            case navigationalPrefetch = "navigational-prefetch"
+            case other = "other"
         }
 
         /// DNS phase properties
@@ -1818,6 +1993,12 @@ public struct RUMResourceEvent: RUMDataModel {
             }
         }
 
+        /// Render blocking status of the resource
+        public enum RenderBlockingStatus: String, Codable {
+            case blocking = "blocking"
+            case nonBlocking = "non-blocking"
+        }
+
         /// SSL phase properties
         public struct SSL: Codable {
             /// Duration in ns of the resource ssl phase
@@ -1845,6 +2026,20 @@ public struct RUMResourceEvent: RUMDataModel {
             case media = "media"
             case other = "other"
             case native = "native"
+        }
+
+        /// Worker phase properties
+        public struct Worker: Codable {
+            /// Duration in nanoseconds of the resource worker phase
+            public let duration: Int64
+
+            /// Duration in nanoseconds between start of the request and start of the worker phase
+            public let start: Int64
+
+            enum CodingKeys: String, CodingKey {
+                case duration = "duration"
+                case start = "start"
+            }
         }
     }
 
@@ -1875,6 +2070,7 @@ public struct RUMResourceEvent: RUMDataModel {
         case reactNative = "react-native"
         case roku = "roku"
         case unity = "unity"
+        case kotlinMultiplatform = "kotlin-multiplatform"
     }
 
     /// View properties
@@ -1924,7 +2120,7 @@ public struct RUMViewEvent: RUMDataModel {
     public let container: Container?
 
     /// User provided context
-    public internal(set) var context: RUMEventAttributes?
+    public var context: RUMEventAttributes?
 
     /// Start of the event in ms from epoch
     public let date: Int64
@@ -1936,7 +2132,7 @@ public struct RUMViewEvent: RUMDataModel {
     public let display: Display?
 
     /// Feature flags properties
-    public internal(set) var featureFlags: FeatureFlags?
+    public var featureFlags: FeatureFlags?
 
     /// Operating system properties
     public let os: RUMOperatingSystem?
@@ -1960,7 +2156,7 @@ public struct RUMViewEvent: RUMDataModel {
     public let type: String = "view"
 
     /// User properties
-    public internal(set) var usr: RUMUser?
+    public var usr: RUMUser?
 
     /// The version for this application
     public let version: String?
@@ -2138,6 +2334,7 @@ public struct RUMViewEvent: RUMDataModel {
             case reactNative = "react-native"
             case roku = "roku"
             case unity = "unity"
+            case kotlinMultiplatform = "kotlin-multiplatform"
         }
 
         /// Attributes of the view's container
@@ -2203,7 +2400,7 @@ public struct RUMViewEvent: RUMDataModel {
 
     /// Feature flags properties
     public struct FeatureFlags: Codable {
-        public internal(set) var featureFlagsInfo: [String: Encodable]
+        public var featureFlagsInfo: [String: Encodable]
     }
 
     /// Privacy properties
@@ -2258,6 +2455,7 @@ public struct RUMViewEvent: RUMDataModel {
         case reactNative = "react-native"
         case roku = "roku"
         case unity = "unity"
+        case kotlinMultiplatform = "kotlin-multiplatform"
     }
 
     /// View properties
@@ -2279,6 +2477,9 @@ public struct RUMViewEvent: RUMDataModel {
 
         /// CSS selector path of the first element (in document order) of the largest layout shift contributing to CLS
         public let cumulativeLayoutShiftTargetSelector: String?
+
+        /// Duration in ns between start of the view and start of the largest layout shift contributing to CLS
+        public let cumulativeLayoutShiftTime: Int64?
 
         /// User custom timings of the view. As timing name is used as facet path, it must contain only letters, digits, or the characters - _ . @ $
         public let customTimings: [String: Int64]?
@@ -2334,6 +2535,12 @@ public struct RUMViewEvent: RUMDataModel {
         /// CSS selector path of the interacted element corresponding to INP
         public let interactionToNextPaintTargetSelector: String?
 
+        /// Duration in ns between start of the view and start of the INP
+        public let interactionToNextPaintTime: Int64?
+
+        /// Duration in ns to from the last interaction on previous view to the moment the current view was displayed
+        public let interactionToNextViewTime: Int64?
+
         /// Whether the View corresponding to this event is considered active
         public let isActive: Bool?
 
@@ -2370,6 +2577,9 @@ public struct RUMViewEvent: RUMDataModel {
         /// User defined name of the view
         public var name: String?
 
+        /// Duration in ns from the moment the view was started until all the initial network requests settled
+        public let networkSettledTime: Int64?
+
         /// URL that linked to the initial view of the page
         public var referrer: String?
 
@@ -2395,6 +2605,7 @@ public struct RUMViewEvent: RUMDataModel {
             case crash = "crash"
             case cumulativeLayoutShift = "cumulative_layout_shift"
             case cumulativeLayoutShiftTargetSelector = "cumulative_layout_shift_target_selector"
+            case cumulativeLayoutShiftTime = "cumulative_layout_shift_time"
             case customTimings = "custom_timings"
             case domComplete = "dom_complete"
             case domContentLoaded = "dom_content_loaded"
@@ -2413,6 +2624,8 @@ public struct RUMViewEvent: RUMDataModel {
             case inForegroundPeriods = "in_foreground_periods"
             case interactionToNextPaint = "interaction_to_next_paint"
             case interactionToNextPaintTargetSelector = "interaction_to_next_paint_target_selector"
+            case interactionToNextPaintTime = "interaction_to_next_paint_time"
+            case interactionToNextViewTime = "interaction_to_next_view_time"
             case isActive = "is_active"
             case isSlowRendered = "is_slow_rendered"
             case jsRefreshRate = "js_refresh_rate"
@@ -2425,6 +2638,7 @@ public struct RUMViewEvent: RUMDataModel {
             case memoryAverage = "memory_average"
             case memoryMax = "memory_max"
             case name = "name"
+            case networkSettledTime = "network_settled_time"
             case referrer = "referrer"
             case refreshRateAverage = "refresh_rate_average"
             case refreshRateMin = "refresh_rate_min"
@@ -2645,7 +2859,7 @@ public struct RUMVitalEvent: RUMDataModel {
     public let container: Container?
 
     /// User provided context
-    public internal(set) var context: RUMEventAttributes?
+    public var context: RUMEventAttributes?
 
     /// Start of the event in ms from epoch
     public let date: Int64
@@ -2675,7 +2889,7 @@ public struct RUMVitalEvent: RUMDataModel {
     public let type: String = "vital"
 
     /// User properties
-    public internal(set) var usr: RUMUser?
+    public var usr: RUMUser?
 
     /// The version for this application
     public let version: String?
@@ -2724,11 +2938,15 @@ public struct RUMVitalEvent: RUMDataModel {
         /// Session-related internal properties
         public let session: Session?
 
+        /// Internal vital properties
+        public let vital: Vital?
+
         enum CodingKeys: String, CodingKey {
             case browserSdkVersion = "browser_sdk_version"
             case configuration = "configuration"
             case formatVersion = "format_version"
             case session = "session"
+            case vital = "vital"
         }
 
         /// Subset of the SDK configuration options in use during its execution
@@ -2762,6 +2980,16 @@ public struct RUMVitalEvent: RUMDataModel {
             public enum Plan: Int, Codable {
                 case plan1 = 1
                 case plan2 = 2
+            }
+        }
+
+        /// Internal vital properties
+        public struct Vital: Codable {
+            /// Whether the value of the vital is computed by the SDK (as opposed to directly provided by the customer)
+            public let computedValue: Bool?
+
+            enum CodingKeys: String, CodingKey {
+                case computedValue = "computed_value"
             }
         }
     }
@@ -2798,6 +3026,7 @@ public struct RUMVitalEvent: RUMDataModel {
             case reactNative = "react-native"
             case roku = "roku"
             case unity = "unity"
+            case kotlinMultiplatform = "kotlin-multiplatform"
         }
 
         /// Attributes of the view's container
@@ -2862,6 +3091,7 @@ public struct RUMVitalEvent: RUMDataModel {
         case reactNative = "react-native"
         case roku = "roku"
         case unity = "unity"
+        case kotlinMultiplatform = "kotlin-multiplatform"
     }
 
     /// View properties
@@ -2891,6 +3121,12 @@ public struct RUMVitalEvent: RUMDataModel {
         /// User custom vital.
         public let custom: [String: Double]?
 
+        /// Details of the vital. It can be used as a secondary identifier (URL, React component name...)
+        public let details: String?
+
+        /// Duration of the vital in nanoseconds
+        public let duration: Double?
+
         /// UUID of the vital
         public let id: String
 
@@ -2902,6 +3138,8 @@ public struct RUMVitalEvent: RUMDataModel {
 
         enum CodingKeys: String, CodingKey {
             case custom = "custom"
+            case details = "details"
+            case duration = "duration"
             case id = "id"
             case name = "name"
             case type = "type"
@@ -2928,6 +3166,9 @@ public struct TelemetryErrorEvent: RUMDataModel {
     /// Start of the event in ms from epoch
     public let date: Int64
 
+    /// The actual percentage of telemetry usage per event
+    public let effectiveSampleRate: Double?
+
     /// Enabled experimental features
     public let experimentalFeatures: [String]?
 
@@ -2941,7 +3182,7 @@ public struct TelemetryErrorEvent: RUMDataModel {
     public let source: Source
 
     /// The telemetry log information
-    public let telemetry: Telemetry
+    public var telemetry: Telemetry
 
     /// Telemetry event type. Should specify telemetry only.
     public let type: String = "telemetry"
@@ -2957,6 +3198,7 @@ public struct TelemetryErrorEvent: RUMDataModel {
         case action = "action"
         case application = "application"
         case date = "date"
+        case effectiveSampleRate = "effective_sample_rate"
         case experimentalFeatures = "experimental_features"
         case service = "service"
         case session = "session"
@@ -3015,15 +3257,22 @@ public struct TelemetryErrorEvent: RUMDataModel {
         case flutter = "flutter"
         case reactNative = "react-native"
         case unity = "unity"
+        case kotlinMultiplatform = "kotlin-multiplatform"
     }
 
     /// The telemetry log information
     public struct Telemetry: Codable {
+        /// Device properties
+        public let device: RUMTelemetryDevice?
+
         /// Error properties
         public let error: Error?
 
         /// Body of the log
         public let message: String
+
+        /// OS properties
+        public let os: RUMTelemetryOperatingSystem?
 
         /// Level/severity of the log
         public let status: String = "error"
@@ -3031,9 +3280,13 @@ public struct TelemetryErrorEvent: RUMDataModel {
         /// Telemetry type
         public let type: String? = "log"
 
-        enum CodingKeys: String, CodingKey {
+        public var telemetryInfo: [String: Encodable]
+
+        enum StaticCodingKeys: String, CodingKey {
+            case device = "device"
             case error = "error"
             case message = "message"
+            case os = "os"
             case status = "status"
             case type = "type"
         }
@@ -3064,6 +3317,47 @@ public struct TelemetryErrorEvent: RUMDataModel {
     }
 }
 
+extension TelemetryErrorEvent.Telemetry {
+    public func encode(to encoder: Encoder) throws {
+        // Encode static properties:
+        var staticContainer = encoder.container(keyedBy: StaticCodingKeys.self)
+        try staticContainer.encodeIfPresent(device, forKey: .device)
+        try staticContainer.encodeIfPresent(error, forKey: .error)
+        try staticContainer.encodeIfPresent(message, forKey: .message)
+        try staticContainer.encodeIfPresent(os, forKey: .os)
+        try staticContainer.encodeIfPresent(status, forKey: .status)
+        try staticContainer.encodeIfPresent(type, forKey: .type)
+
+        // Encode dynamic properties:
+        var dynamicContainer = encoder.container(keyedBy: DynamicCodingKey.self)
+        try telemetryInfo.forEach {
+            let key = DynamicCodingKey($0)
+            try dynamicContainer.encode(AnyEncodable($1), forKey: key)
+        }
+    }
+
+    public init(from decoder: Decoder) throws {
+        // Decode static properties:
+        let staticContainer = try decoder.container(keyedBy: StaticCodingKeys.self)
+        self.device = try staticContainer.decodeIfPresent(RUMTelemetryDevice.self, forKey: .device)
+        self.error = try staticContainer.decodeIfPresent(Error.self, forKey: .error)
+        self.message = try staticContainer.decode(String.self, forKey: .message)
+        self.os = try staticContainer.decodeIfPresent(RUMTelemetryOperatingSystem.self, forKey: .os)
+
+        // Decode other properties into [String: Codable] dictionary:
+        let dynamicContainer = try decoder.container(keyedBy: DynamicCodingKey.self)
+        let allStaticKeys = Set(staticContainer.allKeys.map { $0.stringValue })
+        let dynamicKeys = dynamicContainer.allKeys.filter { !allStaticKeys.contains($0.stringValue) }
+        var dictionary: [String: Codable] = [:]
+
+        try dynamicKeys.forEach { codingKey in
+            dictionary[codingKey.stringValue] = try dynamicContainer.decode(AnyCodable.self, forKey: codingKey)
+        }
+
+        self.telemetryInfo = dictionary
+    }
+}
+
 /// Schema of all properties of a telemetry debug event
 public struct TelemetryDebugEvent: RUMDataModel {
     /// Internal properties
@@ -3078,6 +3372,9 @@ public struct TelemetryDebugEvent: RUMDataModel {
     /// Start of the event in ms from epoch
     public let date: Int64
 
+    /// The actual percentage of telemetry usage per event
+    public let effectiveSampleRate: Double?
+
     /// Enabled experimental features
     public let experimentalFeatures: [String]?
 
@@ -3091,7 +3388,7 @@ public struct TelemetryDebugEvent: RUMDataModel {
     public let source: Source
 
     /// The telemetry log information
-    public internal(set) var telemetry: Telemetry
+    public var telemetry: Telemetry
 
     /// Telemetry event type. Should specify telemetry only.
     public let type: String = "telemetry"
@@ -3107,6 +3404,7 @@ public struct TelemetryDebugEvent: RUMDataModel {
         case action = "action"
         case application = "application"
         case date = "date"
+        case effectiveSampleRate = "effective_sample_rate"
         case experimentalFeatures = "experimental_features"
         case service = "service"
         case session = "session"
@@ -3165,12 +3463,19 @@ public struct TelemetryDebugEvent: RUMDataModel {
         case flutter = "flutter"
         case reactNative = "react-native"
         case unity = "unity"
+        case kotlinMultiplatform = "kotlin-multiplatform"
     }
 
     /// The telemetry log information
     public struct Telemetry: Codable {
+        /// Device properties
+        public let device: RUMTelemetryDevice?
+
         /// Body of the log
         public let message: String
+
+        /// OS properties
+        public let os: RUMTelemetryOperatingSystem?
 
         /// Level/severity of the log
         public let status: String = "debug"
@@ -3178,10 +3483,12 @@ public struct TelemetryDebugEvent: RUMDataModel {
         /// Telemetry type
         public let type: String? = "log"
 
-        public internal(set) var telemetryInfo: [String: Encodable]
+        public var telemetryInfo: [String: Encodable]
 
         enum StaticCodingKeys: String, CodingKey {
+            case device = "device"
             case message = "message"
+            case os = "os"
             case status = "status"
             case type = "type"
         }
@@ -3202,7 +3509,11 @@ extension TelemetryDebugEvent.Telemetry {
     public func encode(to encoder: Encoder) throws {
         // Encode static properties:
         var staticContainer = encoder.container(keyedBy: StaticCodingKeys.self)
+        try staticContainer.encodeIfPresent(device, forKey: .device)
         try staticContainer.encodeIfPresent(message, forKey: .message)
+        try staticContainer.encodeIfPresent(os, forKey: .os)
+        try staticContainer.encodeIfPresent(status, forKey: .status)
+        try staticContainer.encodeIfPresent(type, forKey: .type)
 
         // Encode dynamic properties:
         var dynamicContainer = encoder.container(keyedBy: DynamicCodingKey.self)
@@ -3215,7 +3526,9 @@ extension TelemetryDebugEvent.Telemetry {
     public init(from decoder: Decoder) throws {
         // Decode static properties:
         let staticContainer = try decoder.container(keyedBy: StaticCodingKeys.self)
+        self.device = try staticContainer.decodeIfPresent(RUMTelemetryDevice.self, forKey: .device)
         self.message = try staticContainer.decode(String.self, forKey: .message)
+        self.os = try staticContainer.decodeIfPresent(RUMTelemetryOperatingSystem.self, forKey: .os)
 
         // Decode other properties into [String: Codable] dictionary:
         let dynamicContainer = try decoder.container(keyedBy: DynamicCodingKey.self)
@@ -3244,6 +3557,9 @@ public struct TelemetryConfigurationEvent: RUMDataModel {
 
     /// Start of the event in ms from epoch
     public let date: Int64
+
+    /// The actual percentage of telemetry usage per event
+    public let effectiveSampleRate: Double?
 
     /// Enabled experimental features
     public let experimentalFeatures: [String]?
@@ -3274,6 +3590,7 @@ public struct TelemetryConfigurationEvent: RUMDataModel {
         case action = "action"
         case application = "application"
         case date = "date"
+        case effectiveSampleRate = "effective_sample_rate"
         case experimentalFeatures = "experimental_features"
         case service = "service"
         case session = "session"
@@ -3332,6 +3649,7 @@ public struct TelemetryConfigurationEvent: RUMDataModel {
         case flutter = "flutter"
         case reactNative = "react-native"
         case unity = "unity"
+        case kotlinMultiplatform = "kotlin-multiplatform"
     }
 
     /// The telemetry configuration information
@@ -3339,11 +3657,21 @@ public struct TelemetryConfigurationEvent: RUMDataModel {
         /// Configuration properties
         public var configuration: Configuration
 
+        /// Device properties
+        public let device: RUMTelemetryDevice?
+
+        /// OS properties
+        public let os: RUMTelemetryOperatingSystem?
+
         /// Telemetry type
         public let type: String = "configuration"
 
-        enum CodingKeys: String, CodingKey {
+        public var telemetryInfo: [String: Encodable]
+
+        enum StaticCodingKeys: String, CodingKey {
             case configuration = "configuration"
+            case device = "device"
+            case os = "os"
             case type = "type"
         }
 
@@ -3364,7 +3692,7 @@ public struct TelemetryConfigurationEvent: RUMDataModel {
             /// Whether UIApplication background tasks are enabled
             public let backgroundTasksEnabled: Bool?
 
-            /// Maximum number of batches processed sequencially without a delay
+            /// Maximum number of batches processed sequentially without a delay
             public let batchProcessingLevel: Int64?
 
             /// The window duration for batches sent by the SDK (in milliseconds)
@@ -3373,11 +3701,20 @@ public struct TelemetryConfigurationEvent: RUMDataModel {
             /// The upload frequency of batches (in milliseconds)
             public let batchUploadFrequency: Int64?
 
+            /// The list of events that include feature flags collection
+            public let collectFeatureFlagsOn: [CollectFeatureFlagsOn]?
+
+            /// Whether intake requests are compressed
+            public let compressIntakeRequests: Bool?
+
             /// The version of Dart used in a Flutter application
             public var dartVersion: String?
 
             /// Session replay default privacy level
             public var defaultPrivacyLevel: String?
+
+            /// Privacy control for action name
+            public var enablePrivacyForActionName: Bool?
 
             /// The console.* tracked
             public let forwardConsoleLogs: ForwardConsoleLogs?
@@ -3388,11 +3725,20 @@ public struct TelemetryConfigurationEvent: RUMDataModel {
             /// The reports from the Reporting API tracked
             public let forwardReports: ForwardReports?
 
+            /// Session replay image privacy level
+            public var imagePrivacyLevel: String?
+
             /// The type of initialization the SDK used, in case multiple are supported
             public var initializationType: String?
 
+            /// Whether the SDK is initialised on the application's main or a secondary process
+            public let isMainProcess: Bool?
+
             /// The period between each Mobile Vital sample (in milliseconds)
             public var mobileVitalsUpdatePeriod: Int64?
+
+            /// The list of plugins enabled
+            public var plugins: [Plugins]?
 
             /// The percentage of sessions with Browser RUM & Session Replay pricing tracked (deprecated in favor of session_replay_sample_rate)
             public let premiumSampleRate: Int64?
@@ -3409,6 +3755,9 @@ public struct TelemetryConfigurationEvent: RUMDataModel {
             /// A list of selected tracing propagators
             public let selectedTracingPropagators: [SelectedTracingPropagators]?
 
+            /// Whether logs are sent after the session expiration
+            public var sendLogsAfterSessionExpiration: Bool?
+
             /// The percentage of sessions with RUM & Session Replay pricing tracked
             public var sessionReplaySampleRate: Int64?
 
@@ -3417,6 +3766,9 @@ public struct TelemetryConfigurationEvent: RUMDataModel {
 
             /// Whether initialization fails silently if the SDK is already initialized
             public let silentMultipleInit: Bool?
+
+            /// Whether Session Replay should automatically start a recording when enabled
+            public var startRecordingImmediately: Bool?
 
             /// Whether the session replay start is handled manually
             public var startSessionReplayRecordingManually: Bool?
@@ -3430,8 +3782,26 @@ public struct TelemetryConfigurationEvent: RUMDataModel {
             /// The percentage of telemetry events sent
             public let telemetrySampleRate: Int64?
 
+            /// The percentage of telemetry usage events sent after being sampled by telemetry_sample_rate
+            public let telemetryUsageSampleRate: Int64?
+
+            /// Session replay text and input privacy level
+            public var textAndInputPrivacyLevel: String?
+
+            /// Session replay touch privacy level
+            public var touchPrivacyLevel: String?
+
+            /// The opt-in configuration to add trace context
+            public var traceContextInjection: TraceContextInjection?
+
             /// The percentage of requests traced
             public let traceSampleRate: Int64?
+
+            /// The tracer API used by the SDK. Possible values: 'Datadog', 'OpenTelemetry', 'OpenTracing'
+            public var tracerApi: String?
+
+            /// The version of the tracer API used by the SDK. Eg. '0.1.0'
+            public var tracerApiVersion: String?
 
             /// Whether RUM events are tracked when the application is in Background
             public var trackBackgroundEvents: Bool?
@@ -3478,6 +3848,9 @@ public struct TelemetryConfigurationEvent: RUMDataModel {
             /// Whether the RUM views creation is handled manually
             public var trackViewsManually: Bool?
 
+            /// The initial tracking consent value
+            public let trackingConsent: TrackingConsent?
+
             /// The version of Unity used in a Unity application
             public var unityVersion: String?
 
@@ -3505,6 +3878,9 @@ public struct TelemetryConfigurationEvent: RUMDataModel {
             /// Whether a partitioned secure cross-site session cookie is used
             public let usePartitionedCrossSiteSessionCookie: Bool?
 
+            /// Whether logs are sent to the PCI-compliant intake
+            public var usePciIntake: Bool?
+
             /// Whether a proxy is used
             public var useProxy: Bool?
 
@@ -3529,26 +3905,40 @@ public struct TelemetryConfigurationEvent: RUMDataModel {
                 case batchProcessingLevel = "batch_processing_level"
                 case batchSize = "batch_size"
                 case batchUploadFrequency = "batch_upload_frequency"
+                case collectFeatureFlagsOn = "collect_feature_flags_on"
+                case compressIntakeRequests = "compress_intake_requests"
                 case dartVersion = "dart_version"
                 case defaultPrivacyLevel = "default_privacy_level"
+                case enablePrivacyForActionName = "enable_privacy_for_action_name"
                 case forwardConsoleLogs = "forward_console_logs"
                 case forwardErrorsToLogs = "forward_errors_to_logs"
                 case forwardReports = "forward_reports"
+                case imagePrivacyLevel = "image_privacy_level"
                 case initializationType = "initialization_type"
+                case isMainProcess = "is_main_process"
                 case mobileVitalsUpdatePeriod = "mobile_vitals_update_period"
+                case plugins = "plugins"
                 case premiumSampleRate = "premium_sample_rate"
                 case reactNativeVersion = "react_native_version"
                 case reactVersion = "react_version"
                 case replaySampleRate = "replay_sample_rate"
                 case selectedTracingPropagators = "selected_tracing_propagators"
+                case sendLogsAfterSessionExpiration = "send_logs_after_session_expiration"
                 case sessionReplaySampleRate = "session_replay_sample_rate"
                 case sessionSampleRate = "session_sample_rate"
                 case silentMultipleInit = "silent_multiple_init"
+                case startRecordingImmediately = "start_recording_immediately"
                 case startSessionReplayRecordingManually = "start_session_replay_recording_manually"
                 case storeContextsAcrossPages = "store_contexts_across_pages"
                 case telemetryConfigurationSampleRate = "telemetry_configuration_sample_rate"
                 case telemetrySampleRate = "telemetry_sample_rate"
+                case telemetryUsageSampleRate = "telemetry_usage_sample_rate"
+                case textAndInputPrivacyLevel = "text_and_input_privacy_level"
+                case touchPrivacyLevel = "touch_privacy_level"
+                case traceContextInjection = "trace_context_injection"
                 case traceSampleRate = "trace_sample_rate"
+                case tracerApi = "tracer_api"
+                case tracerApiVersion = "tracer_api_version"
                 case trackBackgroundEvents = "track_background_events"
                 case trackCrossPlatformLongTasks = "track_cross_platform_long_tasks"
                 case trackErrors = "track_errors"
@@ -3564,6 +3954,7 @@ public struct TelemetryConfigurationEvent: RUMDataModel {
                 case trackSessionAcrossSubdomains = "track_session_across_subdomains"
                 case trackUserInteractions = "track_user_interactions"
                 case trackViewsManually = "track_views_manually"
+                case trackingConsent = "tracking_consent"
                 case unityVersion = "unity_version"
                 case useAllowedTracingOrigins = "use_allowed_tracing_origins"
                 case useAllowedTracingUrls = "use_allowed_tracing_urls"
@@ -3573,11 +3964,18 @@ public struct TelemetryConfigurationEvent: RUMDataModel {
                 case useFirstPartyHosts = "use_first_party_hosts"
                 case useLocalEncryption = "use_local_encryption"
                 case usePartitionedCrossSiteSessionCookie = "use_partitioned_cross_site_session_cookie"
+                case usePciIntake = "use_pci_intake"
                 case useProxy = "use_proxy"
                 case useSecureSessionCookie = "use_secure_session_cookie"
                 case useTracing = "use_tracing"
                 case useWorkerUrl = "use_worker_url"
                 case viewTrackingStrategy = "view_tracking_strategy"
+            }
+
+            public enum CollectFeatureFlagsOn: String, Codable {
+                case view = "view"
+                case error = "error"
+                case vital = "vital"
             }
 
             /// The console.* tracked
@@ -3664,11 +4062,35 @@ public struct TelemetryConfigurationEvent: RUMDataModel {
                 }
             }
 
+            public struct Plugins: Codable {
+                /// The name of the plugin
+                public let name: String
+
+                public var pluginsInfo: [String: Encodable]
+
+                enum StaticCodingKeys: String, CodingKey {
+                    case name = "name"
+                }
+            }
+
             public enum SelectedTracingPropagators: String, Codable {
                 case datadog = "datadog"
                 case b3 = "b3"
                 case b3multi = "b3multi"
                 case tracecontext = "tracecontext"
+            }
+
+            /// The opt-in configuration to add trace context
+            public enum TraceContextInjection: String, Codable {
+                case all = "all"
+                case sampled = "sampled"
+            }
+
+            /// The initial tracking consent value
+            public enum TrackingConsent: String, Codable {
+                case granted = "granted"
+                case notGranted = "not-granted"
+                case pending = "pending"
             }
 
             /// View tracking strategy
@@ -3689,6 +4111,521 @@ public struct TelemetryConfigurationEvent: RUMDataModel {
         enum CodingKeys: String, CodingKey {
             case id = "id"
         }
+    }
+}
+
+extension TelemetryConfigurationEvent.Telemetry {
+    public func encode(to encoder: Encoder) throws {
+        // Encode static properties:
+        var staticContainer = encoder.container(keyedBy: StaticCodingKeys.self)
+        try staticContainer.encodeIfPresent(configuration, forKey: .configuration)
+        try staticContainer.encodeIfPresent(device, forKey: .device)
+        try staticContainer.encodeIfPresent(os, forKey: .os)
+        try staticContainer.encodeIfPresent(type, forKey: .type)
+
+        // Encode dynamic properties:
+        var dynamicContainer = encoder.container(keyedBy: DynamicCodingKey.self)
+        try telemetryInfo.forEach {
+            let key = DynamicCodingKey($0)
+            try dynamicContainer.encode(AnyEncodable($1), forKey: key)
+        }
+    }
+
+    public init(from decoder: Decoder) throws {
+        // Decode static properties:
+        let staticContainer = try decoder.container(keyedBy: StaticCodingKeys.self)
+        self.configuration = try staticContainer.decode(Configuration.self, forKey: .configuration)
+        self.device = try staticContainer.decodeIfPresent(RUMTelemetryDevice.self, forKey: .device)
+        self.os = try staticContainer.decodeIfPresent(RUMTelemetryOperatingSystem.self, forKey: .os)
+
+        // Decode other properties into [String: Codable] dictionary:
+        let dynamicContainer = try decoder.container(keyedBy: DynamicCodingKey.self)
+        let allStaticKeys = Set(staticContainer.allKeys.map { $0.stringValue })
+        let dynamicKeys = dynamicContainer.allKeys.filter { !allStaticKeys.contains($0.stringValue) }
+        var dictionary: [String: Codable] = [:]
+
+        try dynamicKeys.forEach { codingKey in
+            dictionary[codingKey.stringValue] = try dynamicContainer.decode(AnyCodable.self, forKey: codingKey)
+        }
+
+        self.telemetryInfo = dictionary
+    }
+}
+
+extension TelemetryConfigurationEvent.Telemetry.Configuration.Plugins {
+    public func encode(to encoder: Encoder) throws {
+        // Encode static properties:
+        var staticContainer = encoder.container(keyedBy: StaticCodingKeys.self)
+        try staticContainer.encodeIfPresent(name, forKey: .name)
+
+        // Encode dynamic properties:
+        var dynamicContainer = encoder.container(keyedBy: DynamicCodingKey.self)
+        try pluginsInfo.forEach {
+            let key = DynamicCodingKey($0)
+            try dynamicContainer.encode(AnyEncodable($1), forKey: key)
+        }
+    }
+
+    public init(from decoder: Decoder) throws {
+        // Decode static properties:
+        let staticContainer = try decoder.container(keyedBy: StaticCodingKeys.self)
+        self.name = try staticContainer.decode(String.self, forKey: .name)
+
+        // Decode other properties into [String: Codable] dictionary:
+        let dynamicContainer = try decoder.container(keyedBy: DynamicCodingKey.self)
+        let allStaticKeys = Set(staticContainer.allKeys.map { $0.stringValue })
+        let dynamicKeys = dynamicContainer.allKeys.filter { !allStaticKeys.contains($0.stringValue) }
+        var dictionary: [String: Codable] = [:]
+
+        try dynamicKeys.forEach { codingKey in
+            dictionary[codingKey.stringValue] = try dynamicContainer.decode(AnyCodable.self, forKey: codingKey)
+        }
+
+        self.pluginsInfo = dictionary
+    }
+}
+
+/// Schema of all properties of a telemetry usage event
+public struct TelemetryUsageEvent: RUMDataModel {
+    /// Internal properties
+    public let dd: DD
+
+    /// Action properties
+    public let action: Action?
+
+    /// Application properties
+    public let application: Application?
+
+    /// Start of the event in ms from epoch
+    public let date: Int64
+
+    /// The actual percentage of telemetry usage per event
+    public let effectiveSampleRate: Double?
+
+    /// Enabled experimental features
+    public let experimentalFeatures: [String]?
+
+    /// The SDK generating the telemetry event
+    public let service: String
+
+    /// Session properties
+    public let session: Session?
+
+    /// The source of this event
+    public let source: Source
+
+    /// The telemetry usage information
+    public var telemetry: Telemetry
+
+    /// Telemetry event type. Should specify telemetry only.
+    public let type: String = "telemetry"
+
+    /// The version of the SDK generating the telemetry event
+    public let version: String
+
+    /// View properties
+    public let view: View?
+
+    enum CodingKeys: String, CodingKey {
+        case dd = "_dd"
+        case action = "action"
+        case application = "application"
+        case date = "date"
+        case effectiveSampleRate = "effective_sample_rate"
+        case experimentalFeatures = "experimental_features"
+        case service = "service"
+        case session = "session"
+        case source = "source"
+        case telemetry = "telemetry"
+        case type = "type"
+        case version = "version"
+        case view = "view"
+    }
+
+    /// Internal properties
+    public struct DD: Codable {
+        /// Version of the RUM event format
+        public let formatVersion: Int64 = 2
+
+        enum CodingKeys: String, CodingKey {
+            case formatVersion = "format_version"
+        }
+    }
+
+    /// Action properties
+    public struct Action: Codable {
+        /// UUID of the action
+        public let id: String
+
+        enum CodingKeys: String, CodingKey {
+            case id = "id"
+        }
+    }
+
+    /// Application properties
+    public struct Application: Codable {
+        /// UUID of the application
+        public let id: String
+
+        enum CodingKeys: String, CodingKey {
+            case id = "id"
+        }
+    }
+
+    /// Session properties
+    public struct Session: Codable {
+        /// UUID of the session
+        public let id: String
+
+        enum CodingKeys: String, CodingKey {
+            case id = "id"
+        }
+    }
+
+    /// The source of this event
+    public enum Source: String, Codable {
+        case android = "android"
+        case ios = "ios"
+        case browser = "browser"
+        case flutter = "flutter"
+        case reactNative = "react-native"
+        case unity = "unity"
+        case kotlinMultiplatform = "kotlin-multiplatform"
+    }
+
+    /// The telemetry usage information
+    public struct Telemetry: Codable {
+        /// Device properties
+        public let device: RUMTelemetryDevice?
+
+        /// OS properties
+        public let os: RUMTelemetryOperatingSystem?
+
+        /// Telemetry type
+        public let type: String = "usage"
+
+        public let usage: Usage
+
+        public var telemetryInfo: [String: Encodable]
+
+        enum StaticCodingKeys: String, CodingKey {
+            case device = "device"
+            case os = "os"
+            case type = "type"
+            case usage = "usage"
+        }
+
+        public enum Usage: Codable {
+            case telemetryCommonFeaturesUsage(value: TelemetryCommonFeaturesUsage)
+            case telemetryMobileFeaturesUsage(value: TelemetryMobileFeaturesUsage)
+
+            // MARK: - Codable
+
+            public func encode(to encoder: Encoder) throws {
+                // Encode only the associated value, without encoding enum case
+                var container = encoder.singleValueContainer()
+
+                switch self {
+                case .telemetryCommonFeaturesUsage(let value):
+                    try container.encode(value)
+                case .telemetryMobileFeaturesUsage(let value):
+                    try container.encode(value)
+                }
+            }
+
+            public init(from decoder: Decoder) throws {
+                // Decode enum case from associated value
+                let container = try decoder.singleValueContainer()
+
+                if let value = try? container.decode(TelemetryCommonFeaturesUsage.self) {
+                    self = .telemetryCommonFeaturesUsage(value: value)
+                    return
+                }
+                if let value = try? container.decode(TelemetryMobileFeaturesUsage.self) {
+                    self = .telemetryMobileFeaturesUsage(value: value)
+                    return
+                }
+                let error = DecodingError.Context(
+                    codingPath: container.codingPath,
+                    debugDescription: """
+                    Failed to decode `Usage`.
+                    Ran out of possibilities when trying to decode the value of associated type.
+                    """
+                )
+                throw DecodingError.typeMismatch(Usage.self, error)
+            }
+
+            /// Schema of features usage common across SDKs
+            public enum TelemetryCommonFeaturesUsage: Codable {
+                case setTrackingConsent(value: SetTrackingConsent)
+                case stopSession(value: StopSession)
+                case startView(value: StartView)
+                case addAction(value: AddAction)
+                case addError(value: AddError)
+                case setGlobalContext(value: SetGlobalContext)
+                case setUser(value: SetUser)
+                case addFeatureFlagEvaluation(value: AddFeatureFlagEvaluation)
+
+                // MARK: - Codable
+
+                public func encode(to encoder: Encoder) throws {
+                    // Encode only the associated value, without encoding enum case
+                    var container = encoder.singleValueContainer()
+
+                    switch self {
+                    case .setTrackingConsent(let value):
+                        try container.encode(value)
+                    case .stopSession(let value):
+                        try container.encode(value)
+                    case .startView(let value):
+                        try container.encode(value)
+                    case .addAction(let value):
+                        try container.encode(value)
+                    case .addError(let value):
+                        try container.encode(value)
+                    case .setGlobalContext(let value):
+                        try container.encode(value)
+                    case .setUser(let value):
+                        try container.encode(value)
+                    case .addFeatureFlagEvaluation(let value):
+                        try container.encode(value)
+                    }
+                }
+
+                public init(from decoder: Decoder) throws {
+                    // Decode enum case from associated value
+                    let container = try decoder.singleValueContainer()
+
+                    if let value = try? container.decode(SetTrackingConsent.self) {
+                        self = .setTrackingConsent(value: value)
+                        return
+                    }
+                    if let value = try? container.decode(StopSession.self) {
+                        self = .stopSession(value: value)
+                        return
+                    }
+                    if let value = try? container.decode(StartView.self) {
+                        self = .startView(value: value)
+                        return
+                    }
+                    if let value = try? container.decode(AddAction.self) {
+                        self = .addAction(value: value)
+                        return
+                    }
+                    if let value = try? container.decode(AddError.self) {
+                        self = .addError(value: value)
+                        return
+                    }
+                    if let value = try? container.decode(SetGlobalContext.self) {
+                        self = .setGlobalContext(value: value)
+                        return
+                    }
+                    if let value = try? container.decode(SetUser.self) {
+                        self = .setUser(value: value)
+                        return
+                    }
+                    if let value = try? container.decode(AddFeatureFlagEvaluation.self) {
+                        self = .addFeatureFlagEvaluation(value: value)
+                        return
+                    }
+                    let error = DecodingError.Context(
+                        codingPath: container.codingPath,
+                        debugDescription: """
+                        Failed to decode `TelemetryCommonFeaturesUsage`.
+                        Ran out of possibilities when trying to decode the value of associated type.
+                        """
+                    )
+                    throw DecodingError.typeMismatch(TelemetryCommonFeaturesUsage.self, error)
+                }
+
+                public struct SetTrackingConsent: Codable {
+                    /// setTrackingConsent API
+                    public let feature: String = "set-tracking-consent"
+
+                    /// The tracking consent value set by the user
+                    public let trackingConsent: TrackingConsent
+
+                    enum CodingKeys: String, CodingKey {
+                        case feature = "feature"
+                        case trackingConsent = "tracking_consent"
+                    }
+
+                    /// The tracking consent value set by the user
+                    public enum TrackingConsent: String, Codable {
+                        case granted = "granted"
+                        case notGranted = "not-granted"
+                        case pending = "pending"
+                    }
+                }
+
+                public struct StopSession: Codable {
+                    /// stopSession API
+                    public let feature: String = "stop-session"
+
+                    enum CodingKeys: String, CodingKey {
+                        case feature = "feature"
+                    }
+                }
+
+                public struct StartView: Codable {
+                    /// startView API
+                    public let feature: String = "start-view"
+
+                    enum CodingKeys: String, CodingKey {
+                        case feature = "feature"
+                    }
+                }
+
+                public struct AddAction: Codable {
+                    /// addAction API
+                    public let feature: String = "add-action"
+
+                    enum CodingKeys: String, CodingKey {
+                        case feature = "feature"
+                    }
+                }
+
+                public struct AddError: Codable {
+                    /// addError API
+                    public let feature: String = "add-error"
+
+                    enum CodingKeys: String, CodingKey {
+                        case feature = "feature"
+                    }
+                }
+
+                public struct SetGlobalContext: Codable {
+                    /// setGlobalContext, setGlobalContextProperty, addAttribute APIs
+                    public let feature: String = "set-global-context"
+
+                    enum CodingKeys: String, CodingKey {
+                        case feature = "feature"
+                    }
+                }
+
+                public struct SetUser: Codable {
+                    /// setUser, setUserProperty, setUserInfo APIs
+                    public let feature: String = "set-user"
+
+                    enum CodingKeys: String, CodingKey {
+                        case feature = "feature"
+                    }
+                }
+
+                public struct AddFeatureFlagEvaluation: Codable {
+                    /// addFeatureFlagEvaluation API
+                    public let feature: String = "add-feature-flag-evaluation"
+
+                    enum CodingKeys: String, CodingKey {
+                        case feature = "feature"
+                    }
+                }
+            }
+
+            /// Schema of mobile specific features usage
+            public enum TelemetryMobileFeaturesUsage: Codable {
+                case addViewLoadingTime(value: AddViewLoadingTime)
+
+                // MARK: - Codable
+
+                public func encode(to encoder: Encoder) throws {
+                    // Encode only the associated value, without encoding enum case
+                    var container = encoder.singleValueContainer()
+
+                    switch self {
+                    case .addViewLoadingTime(let value):
+                        try container.encode(value)
+                    }
+                }
+
+                public init(from decoder: Decoder) throws {
+                    // Decode enum case from associated value
+                    let container = try decoder.singleValueContainer()
+
+                    if let value = try? container.decode(AddViewLoadingTime.self) {
+                        self = .addViewLoadingTime(value: value)
+                        return
+                    }
+                    let error = DecodingError.Context(
+                        codingPath: container.codingPath,
+                        debugDescription: """
+                        Failed to decode `TelemetryMobileFeaturesUsage`.
+                        Ran out of possibilities when trying to decode the value of associated type.
+                        """
+                    )
+                    throw DecodingError.typeMismatch(TelemetryMobileFeaturesUsage.self, error)
+                }
+
+                public struct AddViewLoadingTime: Codable {
+                    /// addViewLoadingTime API
+                    public let feature: String = "addViewLoadingTime"
+
+                    /// Whether the available view is not active
+                    public let noActiveView: Bool
+
+                    /// Whether the view is not available
+                    public let noView: Bool
+
+                    /// Whether the loading time was overwritten
+                    public let overwritten: Bool
+
+                    enum CodingKeys: String, CodingKey {
+                        case feature = "feature"
+                        case noActiveView = "no_active_view"
+                        case noView = "no_view"
+                        case overwritten = "overwritten"
+                    }
+                }
+            }
+        }
+    }
+
+    /// View properties
+    public struct View: Codable {
+        /// UUID of the view
+        public let id: String
+
+        enum CodingKeys: String, CodingKey {
+            case id = "id"
+        }
+    }
+}
+
+extension TelemetryUsageEvent.Telemetry {
+    public func encode(to encoder: Encoder) throws {
+        // Encode static properties:
+        var staticContainer = encoder.container(keyedBy: StaticCodingKeys.self)
+        try staticContainer.encodeIfPresent(device, forKey: .device)
+        try staticContainer.encodeIfPresent(os, forKey: .os)
+        try staticContainer.encodeIfPresent(type, forKey: .type)
+        try staticContainer.encodeIfPresent(usage, forKey: .usage)
+
+        // Encode dynamic properties:
+        var dynamicContainer = encoder.container(keyedBy: DynamicCodingKey.self)
+        try telemetryInfo.forEach {
+            let key = DynamicCodingKey($0)
+            try dynamicContainer.encode(AnyEncodable($1), forKey: key)
+        }
+    }
+
+    public init(from decoder: Decoder) throws {
+        // Decode static properties:
+        let staticContainer = try decoder.container(keyedBy: StaticCodingKeys.self)
+        self.device = try staticContainer.decodeIfPresent(RUMTelemetryDevice.self, forKey: .device)
+        self.os = try staticContainer.decodeIfPresent(RUMTelemetryOperatingSystem.self, forKey: .os)
+        self.usage = try staticContainer.decode(Usage.self, forKey: .usage)
+
+        // Decode other properties into [String: Codable] dictionary:
+        let dynamicContainer = try decoder.container(keyedBy: DynamicCodingKey.self)
+        let allStaticKeys = Set(staticContainer.allKeys.map { $0.stringValue })
+        let dynamicKeys = dynamicContainer.allKeys.filter { !allStaticKeys.contains($0.stringValue) }
+        var dictionary: [String: Codable] = [:]
+
+        try dynamicKeys.forEach { codingKey in
+            dictionary[codingKey.stringValue] = try dynamicContainer.decode(AnyCodable.self, forKey: codingKey)
+        }
+
+        self.telemetryInfo = dictionary
     }
 }
 
@@ -3778,7 +4715,7 @@ public struct RUMConnectivity: Codable {
 
 /// User provided context
 public struct RUMEventAttributes: Codable {
-    public internal(set) var contextInfo: [String: Encodable]
+    public var contextInfo: [String: Encodable]
 }
 
 extension RUMEventAttributes {
@@ -3891,6 +4828,9 @@ public struct RUMSyntheticsTest: Codable {
 
 /// User properties
 public struct RUMUser: Codable {
+    /// Identifier of the user across sessions
+    public let anonymousId: String?
+
     /// Email of the user
     public let email: String?
 
@@ -3900,9 +4840,10 @@ public struct RUMUser: Codable {
     /// Name of the user
     public let name: String?
 
-    public internal(set) var usrInfo: [String: Encodable]
+    public var usrInfo: [String: Encodable]
 
     enum StaticCodingKeys: String, CodingKey {
+        case anonymousId = "anonymous_id"
         case email = "email"
         case id = "id"
         case name = "name"
@@ -3913,6 +4854,7 @@ extension RUMUser {
     public func encode(to encoder: Encoder) throws {
         // Encode static properties:
         var staticContainer = encoder.container(keyedBy: StaticCodingKeys.self)
+        try staticContainer.encodeIfPresent(anonymousId, forKey: .anonymousId)
         try staticContainer.encodeIfPresent(email, forKey: .email)
         try staticContainer.encodeIfPresent(id, forKey: .id)
         try staticContainer.encodeIfPresent(name, forKey: .name)
@@ -3928,6 +4870,7 @@ extension RUMUser {
     public init(from decoder: Decoder) throws {
         // Decode static properties:
         let staticContainer = try decoder.container(keyedBy: StaticCodingKeys.self)
+        self.anonymousId = try staticContainer.decodeIfPresent(String.self, forKey: .anonymousId)
         self.email = try staticContainer.decodeIfPresent(String.self, forKey: .email)
         self.id = try staticContainer.decodeIfPresent(String.self, forKey: .id)
         self.name = try staticContainer.decodeIfPresent(String.self, forKey: .name)
@@ -4001,4 +4944,40 @@ public enum RUMMethod: String, Codable {
     case connect = "CONNECT"
 }
 
-// Generated from https://github.com/DataDog/rum-events-format/tree/63842bcc15dec58b68fc0a57260715f8dfcde330
+/// Device properties
+public struct RUMTelemetryDevice: Codable {
+    /// Architecture of the device
+    public let architecture: String?
+
+    /// Brand of the device
+    public let brand: String?
+
+    /// Model of the device
+    public let model: String?
+
+    enum CodingKeys: String, CodingKey {
+        case architecture = "architecture"
+        case brand = "brand"
+        case model = "model"
+    }
+}
+
+/// OS properties
+public struct RUMTelemetryOperatingSystem: Codable {
+    /// Build of the OS
+    public let build: String?
+
+    /// Name of the OS
+    public let name: String?
+
+    /// Version of the OS
+    public let version: String?
+
+    enum CodingKeys: String, CodingKey {
+        case build = "build"
+        case name = "name"
+        case version = "version"
+    }
+}
+
+// Generated from https://github.com/DataDog/rum-events-format/tree/81c3d7401cba2a2faf48b5f4c0e8aca05c759662

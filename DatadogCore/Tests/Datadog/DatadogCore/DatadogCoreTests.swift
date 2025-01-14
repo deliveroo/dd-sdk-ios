@@ -78,6 +78,65 @@ class DatadogCoreTests: XCTestCase {
         XCTAssertEqual(requestBuilderSpy.requestParameters.count, 1, "It should send only one request")
     }
 
+    func testWhenWritingEventsWithPendingConsentThenGranted_itUploadsAllEvents() throws {
+        // Given
+        let core = DatadogCore(
+            directory: temporaryCoreDirectory,
+            dateProvider: SystemDateProvider(),
+            initialConsent: .mockRandom(),
+            performance: .combining(
+                storagePerformance: StoragePerformanceMock.readAllFiles,
+                uploadPerformance: UploadPerformanceMock.veryQuick
+            ),
+            httpClient: HTTPClientMock(),
+            encryption: nil,
+            contextProvider: .mockAny(),
+            applicationVersion: .mockAny(),
+            maxBatchesPerUpload: 1,
+            backgroundTasksEnabled: .mockAny()
+        )
+        defer { core.flushAndTearDown() }
+
+        let send2RequestsExpectation = expectation(description: "send 2 requests")
+        send2RequestsExpectation.expectedFulfillmentCount = 2
+
+        let requestBuilderSpy = FeatureRequestBuilderSpy()
+        requestBuilderSpy.onRequest = { _, _ in send2RequestsExpectation.fulfill() }
+
+        try core.register(feature: FeatureMock(requestBuilder: requestBuilderSpy))
+
+        // When
+        let scope = core.scope(for: FeatureMock.self)
+        core.set(trackingConsent: .pending)
+        scope.eventWriteContext { context, writer in
+            XCTAssertEqual(context.trackingConsent, .pending)
+            writer.write(value: FeatureMock.Event(event: "pending"))
+        }
+
+        core.set(trackingConsent: .granted)
+        scope.eventWriteContext { context, writer in
+            XCTAssertEqual(context.trackingConsent, .granted)
+            writer.write(value: FeatureMock.Event(event: "granted"))
+        }
+
+        // Then
+        waitForExpectations(timeout: 2)
+
+        let uploadedEvents = requestBuilderSpy.requestParameters
+            .flatMap { $0.events }
+            .map { $0.data.utf8String }
+
+        XCTAssertEqual(
+            uploadedEvents,
+            [
+                #"{"event":"pending"}"#,
+                #"{"event":"granted"}"#
+            ],
+            "It should upload all events"
+        )
+        XCTAssertEqual(requestBuilderSpy.requestParameters.count, 2, "It should send 2 requests")
+    }
+
     func testWhenWritingEventsWithBypassingConsent_itUploadsAllEvents() throws {
         // Given
         let core = DatadogCore(
@@ -230,8 +289,8 @@ class DatadogCoreTests: XCTestCase {
 
         // Then
         let storage1 = core1.stores.values.first?.storage
-        XCTAssertEqual(storage1?.authorizedFilesOrchestrator.performance.maxObjectSize, 512.KB.asUInt64())
-        XCTAssertEqual(storage1?.authorizedFilesOrchestrator.performance.maxFileSize, 4.MB.asUInt64())
+        XCTAssertEqual(storage1?.authorizedFilesOrchestrator.performance.maxObjectSize, 512.KB.asUInt32())
+        XCTAssertEqual(storage1?.authorizedFilesOrchestrator.performance.maxFileSize, 4.MB.asUInt32())
 
         let storage2 = core2.stores.values.first?.storage
         XCTAssertEqual(storage2?.authorizedFilesOrchestrator.performance.maxObjectSize, 456)

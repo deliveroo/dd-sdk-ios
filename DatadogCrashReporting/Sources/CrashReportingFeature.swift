@@ -57,8 +57,13 @@ internal final class CrashReportingFeature: DatadogFeature {
     func sendCrashReportIfFound() {
         queue.async {
             self.plugin.readPendingCrashReport { [weak self] crashReport in
-                guard let self = self, let availableCrashReport = crashReport else {
+                guard let self = self else {
+                    return false
+                }
+
+                guard let availableCrashReport = crashReport else {
                     DD.logger.debug("No pending Crash found")
+                    self.sender.send(launch: .init(didCrash: false))
                     return false
                 }
 
@@ -67,10 +72,12 @@ internal final class CrashReportingFeature: DatadogFeature {
                 guard let crashContext = availableCrashReport.context.flatMap({ self.decode(crashContextData: $0) }) else {
                     // `CrashContext` is malformed and and cannot be read. Return `true` to let the crash reporter
                     // purge this crash report as we are not able to process it respectively.
+                    self.sender.send(launch: .init(didCrash: true))
                     return true
                 }
 
                 self.sender.send(report: availableCrashReport, with: crashContext)
+                self.sender.send(launch: .init(didCrash: true))
                 return true
             }
         }
@@ -90,13 +97,25 @@ internal final class CrashReportingFeature: DatadogFeature {
     /// Note: this `JSONEncoder` must have the same configuration as the `JSONEncoder` used later for writing payloads to uploadable files.
     /// Otherwise the format of data read and uploaded from crash report context will be different than the format of data retrieved from the user
     /// and written directly to uploadable file.
-    private let crashContextEncoder: JSONEncoder = .dd.default()
+    internal static let crashContextEncoder: JSONEncoder = .dd.default()
     /// JSON decoder used for reading `CrashContext` from JSON `Data` injected to crash report.
-    private let crashContextDecoder = JSONDecoder()
+    /// Note: it must follow a configuration that enables reading data encoded with `crashContextEncoder`.
+    internal static let crashContextDecoder: JSONDecoder = {
+        var decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let dateString = try container.decode(String.self)
+            guard let date = iso8601DateFormatter.date(from: dateString) else {
+                throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid date format: Requires ISO8601.")
+            }
+            return date
+        }
+        return decoder
+    }()
 
     private func encode(crashContext: CrashContext) -> Data? {
         do {
-            return try crashContextEncoder.encode(crashContext)
+            return try CrashReportingFeature.crashContextEncoder.encode(crashContext)
         } catch {
             DD.logger.error(
                 """
@@ -113,7 +132,7 @@ internal final class CrashReportingFeature: DatadogFeature {
 
     private func decode(crashContextData: Data) -> CrashContext? {
         do {
-            return try crashContextDecoder.decode(CrashContext.self, from: crashContextData)
+            return try CrashReportingFeature.crashContextDecoder.decode(CrashContext.self, from: crashContextData)
         } catch {
             DD.logger.error(
                 """

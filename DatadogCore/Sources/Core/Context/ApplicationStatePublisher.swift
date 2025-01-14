@@ -7,13 +7,12 @@
 #if canImport(UIKit)
 import UIKit
 import DatadogInternal
+#if canImport(WatchKit)
+import WatchKit
+#endif
 
 internal final class ApplicationStatePublisher: ContextValuePublisher {
     typealias Snapshot = AppStateHistory.Snapshot
-
-    private static var currentApplicationState: UIApplication.State {
-        UIApplication.dd.managedShared?.applicationState ?? .active // fallback to most expected state
-    }
 
     /// The default publisher queue.
     private static let defaultQueue = DispatchQueue(
@@ -51,19 +50,21 @@ internal final class ApplicationStatePublisher: ContextValuePublisher {
     /// Creates a Application state publisher for publishing application state
     /// history.
     ///
+    /// **Note**: It must be called on the main thread.
+    ///
     /// - Parameters:
-    ///   - initialState: The initial application state.
-    ///   - queue: The queue for publishing the history.
-    ///   - dateProvider: The date provider for the Application state snapshot timestamp.
+    ///   - appStateProvider: The provider to access the current application state.
     ///   - notificationCenter: The notification center where this publisher observes `UIApplication` notifications.
+    ///   - dateProvider: The date provider for the Application state snapshot timestamp.
+    ///   - queue: The queue for publishing the history.
     init(
-        initialState: AppState,
-        queue: DispatchQueue = ApplicationStatePublisher.defaultQueue,
-        dateProvider: DateProvider = SystemDateProvider(),
-        notificationCenter: NotificationCenter = .default
+        appStateProvider: AppStateProvider,
+        notificationCenter: NotificationCenter,
+        dateProvider: DateProvider,
+        queue: DispatchQueue = ApplicationStatePublisher.defaultQueue
     ) {
         let initialValue = AppStateHistory(
-            initialState: initialState,
+            initialState: appStateProvider.current,
             date: dateProvider.now
         )
 
@@ -74,36 +75,12 @@ internal final class ApplicationStatePublisher: ContextValuePublisher {
         self.notificationCenter = notificationCenter
     }
 
-    /// Creates a Application state publisher for publishing application state
-    /// history.
-    ///
-    /// **Note**: It must be called on the main thread.
-    ///
-    /// - Parameters:
-    ///   - applicationState: The current shared `UIApplication` state.
-    ///   - queue: The queue for publishing the history.
-    ///   - dateProvider: The date provider for the Application state snapshot timestamp.
-    ///   - notificationCenter: The notification center where this publisher observes `UIApplication` notifications.
-    convenience init(
-        applicationState: UIApplication.State = ApplicationStatePublisher.currentApplicationState,
-        queue: DispatchQueue = ApplicationStatePublisher.defaultQueue,
-        dateProvider: DateProvider = SystemDateProvider(),
-        notificationCenter: NotificationCenter = .default
-    ) {
-        self.init(
-            initialState: AppState(applicationState),
-            queue: queue,
-            dateProvider: dateProvider,
-            notificationCenter: notificationCenter
-        )
-    }
-
     func publish(to receiver: @escaping ContextValueReceiver<AppStateHistory>) {
         queue.async { self.receiver = receiver }
-        notificationCenter.addObserver(self, selector: #selector(applicationDidBecomeActive), name: UIApplication.didBecomeActiveNotification, object: nil)
-        notificationCenter.addObserver(self, selector: #selector(applicationWillResignActive), name: UIApplication.willResignActiveNotification, object: nil)
-        notificationCenter.addObserver(self, selector: #selector(applicationDidEnterBackground), name: UIApplication.didEnterBackgroundNotification, object: nil)
-        notificationCenter.addObserver(self, selector: #selector(applicationWillEnterForeground), name: UIApplication.willEnterForegroundNotification, object: nil)
+        notificationCenter.addObserver(self, selector: #selector(applicationDidBecomeActive), name: ApplicationNotifications.didBecomeActive, object: nil)
+        notificationCenter.addObserver(self, selector: #selector(applicationWillResignActive), name: ApplicationNotifications.willResignActive, object: nil)
+        notificationCenter.addObserver(self, selector: #selector(applicationDidEnterBackground), name: ApplicationNotifications.didEnterBackground, object: nil)
+        notificationCenter.addObserver(self, selector: #selector(applicationWillEnterForeground), name: ApplicationNotifications.willEnterForeground, object: nil)
     }
 
     @objc
@@ -135,10 +112,10 @@ internal final class ApplicationStatePublisher: ContextValuePublisher {
     }
 
     func cancel() {
-        notificationCenter.removeObserver(self, name: UIApplication.didBecomeActiveNotification, object: nil)
-        notificationCenter.removeObserver(self, name: UIApplication.willResignActiveNotification, object: nil)
-        notificationCenter.removeObserver(self, name: UIApplication.didEnterBackgroundNotification, object: nil)
-        notificationCenter.removeObserver(self, name: UIApplication.willEnterForegroundNotification, object: nil)
+        notificationCenter.removeObserver(self, name: ApplicationNotifications.didBecomeActive, object: nil)
+        notificationCenter.removeObserver(self, name: ApplicationNotifications.willResignActive, object: nil)
+        notificationCenter.removeObserver(self, name: ApplicationNotifications.didEnterBackground, object: nil)
+        notificationCenter.removeObserver(self, name: ApplicationNotifications.willEnterForeground, object: nil)
         queue.async { self.receiver = nil }
     }
 }

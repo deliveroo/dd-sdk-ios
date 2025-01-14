@@ -13,12 +13,84 @@
 
 @implementation DDSessionReplay_apiTests
 
-- (void)testConfiguration {
+// MARK: Configuration
+- (void)testConfigurationDeprecatedApi __attribute__ ((deprecated)) {
     DDSessionReplayConfiguration *configuration = [[DDSessionReplayConfiguration alloc] initWithReplaySampleRate:100];
     configuration.defaultPrivacyLevel = DDSessionReplayConfigurationPrivacyLevelAllow;
-    configuration.customEndpoint = [NSURL new];
 
     [DDSessionReplay enableWith:configuration];
 }
 
+- (void)testConfigurationWithNewApi {
+    DDSessionReplayConfiguration *configuration = [[DDSessionReplayConfiguration alloc] initWithReplaySampleRate:100
+                                                                                        textAndInputPrivacyLevel:DDTextAndInputPrivacyLevelMaskAll
+                                                                                               imagePrivacyLevel:DDImagePrivacyLevelMaskNone
+                                                                                               touchPrivacyLevel:DDTouchPrivacyLevelShow
+                                                                                                    featureFlags:nil];
+    configuration.customEndpoint = [NSURL new];
+
+    configuration.textAndInputPrivacyLevel = DDTextAndInputPrivacyLevelMaskSensitiveInputs;
+    configuration.imagePrivacyLevel = DDImagePrivacyLevelMaskAll;
+    configuration.touchPrivacyLevel = DDTouchPrivacyLevelHide;
+
+    [DDSessionReplay enableWith:configuration];
+}
+
+- (void)testStartAndStopRecording {
+    [DDSessionReplay startRecording];
+    [DDSessionReplay stopRecording];
+}
+
+- (void)testStartRecordingImmediately {
+    DDSessionReplayConfiguration *configuration = [[DDSessionReplayConfiguration alloc] initWithReplaySampleRate:100
+                                                                                        textAndInputPrivacyLevel:DDTextAndInputPrivacyLevelMaskAll
+                                                                                               imagePrivacyLevel:DDImagePrivacyLevelMaskAll
+                                                                                               touchPrivacyLevel:DDTouchPrivacyLevelHide
+                                                                                                    featureFlags:nil];
+
+    configuration.startRecordingImmediately = false;
+
+    XCTAssertFalse(configuration.startRecordingImmediately);
+}
+
+// MARK: Privacy Overrides
+- (void)testSettingAndGettingOverrides {
+    // Given
+    UIView *view = [[UIView alloc] init];
+
+    // When
+    view.ddSessionReplayPrivacyOverrides.textAndInputPrivacy = DDTextAndInputPrivacyLevelOverrideMaskAll;
+    view.ddSessionReplayPrivacyOverrides.imagePrivacy = DDImagePrivacyLevelOverrideMaskAll;
+    view.ddSessionReplayPrivacyOverrides.touchPrivacy = DDTouchPrivacyLevelOverrideHide;
+    view.ddSessionReplayPrivacyOverrides.hide = @YES;
+
+    // Then
+    XCTAssertEqual(view.ddSessionReplayPrivacyOverrides.textAndInputPrivacy, DDTextAndInputPrivacyLevelOverrideMaskAll);
+    XCTAssertEqual(view.ddSessionReplayPrivacyOverrides.imagePrivacy, DDImagePrivacyLevelOverrideMaskAll);
+    XCTAssertEqual(view.ddSessionReplayPrivacyOverrides.touchPrivacy, DDTouchPrivacyLevelOverrideHide);
+    XCTAssertTrue(view.ddSessionReplayPrivacyOverrides.hide.boolValue);
+}
+
+- (void)testClearingOverride {
+    // Given
+    UIView *view = [[UIView alloc] init];
+
+    // Set initial values
+    view.ddSessionReplayPrivacyOverrides.textAndInputPrivacy = DDTextAndInputPrivacyLevelOverrideMaskAll;
+    view.ddSessionReplayPrivacyOverrides.imagePrivacy = DDImagePrivacyLevelOverrideMaskAll;
+    view.ddSessionReplayPrivacyOverrides.touchPrivacy = DDTouchPrivacyLevelOverrideHide;
+    view.ddSessionReplayPrivacyOverrides.hide = @YES;
+
+    // When
+    view.ddSessionReplayPrivacyOverrides.textAndInputPrivacy = DDTextAndInputPrivacyLevelOverrideNone;
+    view.ddSessionReplayPrivacyOverrides.imagePrivacy = DDImagePrivacyLevelOverrideNone;
+    view.ddSessionReplayPrivacyOverrides.touchPrivacy = DDTouchPrivacyLevelOverrideNone;
+    view.ddSessionReplayPrivacyOverrides.hide = nil;
+
+    // Then
+    XCTAssertEqual(view.ddSessionReplayPrivacyOverrides.textAndInputPrivacy, DDTextAndInputPrivacyLevelOverrideNone);
+    XCTAssertEqual(view.ddSessionReplayPrivacyOverrides.imagePrivacy, DDImagePrivacyLevelOverrideNone);
+    XCTAssertEqual(view.ddSessionReplayPrivacyOverrides.touchPrivacy, DDTouchPrivacyLevelOverrideNone);
+    XCTAssertNil(view.ddSessionReplayPrivacyOverrides.hide);
+}
 @end

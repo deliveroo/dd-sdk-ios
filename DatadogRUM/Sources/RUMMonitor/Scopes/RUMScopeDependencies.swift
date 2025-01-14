@@ -19,9 +19,9 @@ internal struct VitalsReaders {
         telemetry: Telemetry = NOPTelemetry()
     ) {
         self.frequency = frequency
-        self.cpu = VitalCPUReader(telemetry: telemetry)
+        self.cpu = VitalCPUReader(notificationCenter: .default, telemetry: telemetry)
         self.memory = VitalMemoryReader()
-        self.refreshRate = VitalRefreshRateReader()
+        self.refreshRate = VitalRefreshRateReader(notificationCenter: .default)
     }
 }
 
@@ -36,6 +36,7 @@ internal struct RUMScopeDependencies {
     let firstPartyHosts: FirstPartyHosts?
     let eventBuilder: RUMEventBuilder
     let rumUUIDGenerator: RUMUUIDGenerator
+    let backtraceReporter: BacktraceReporting?
     /// Integration with CIApp tests. It contains the CIApp test context when active.
     let ciTest: RUMCITest?
     let syntheticsTest: RUMSyntheticsTest?
@@ -43,10 +44,12 @@ internal struct RUMScopeDependencies {
     let onSessionStart: RUM.SessionListener?
     let viewCache: ViewCache
     /// The RUM context necessary for tracking fatal errors like Crashes or fatal App Hangs.
-    let fatalErrorContext: FatalErrorContextNotifier
+    let fatalErrorContext: FatalErrorContextNotifying
     /// Telemetry endpoint.
     let telemetry: Telemetry
     let sessionType: RUMSessionType
+    let sessionEndedMetric: SessionEndedMetricController
+    let watchdogTermination: WatchdogTerminationMonitor?
 
     init(
         featureScope: FeatureScope,
@@ -57,11 +60,15 @@ internal struct RUMScopeDependencies {
         firstPartyHosts: FirstPartyHosts?,
         eventBuilder: RUMEventBuilder,
         rumUUIDGenerator: RUMUUIDGenerator,
+        backtraceReporter: BacktraceReporting?,
         ciTest: RUMCITest?,
         syntheticsTest: RUMSyntheticsTest?,
         vitalsReaders: VitalsReaders?,
         onSessionStart: RUM.SessionListener?,
-        viewCache: ViewCache
+        viewCache: ViewCache,
+        fatalErrorContext: FatalErrorContextNotifying,
+        sessionEndedMetric: SessionEndedMetricController,
+        watchdogTermination: WatchdogTerminationMonitor?
     ) {
         self.featureScope = featureScope
         self.rumApplicationID = rumApplicationID
@@ -71,13 +78,16 @@ internal struct RUMScopeDependencies {
         self.firstPartyHosts = firstPartyHosts
         self.eventBuilder = eventBuilder
         self.rumUUIDGenerator = rumUUIDGenerator
+        self.backtraceReporter = backtraceReporter
         self.ciTest = ciTest
         self.syntheticsTest = syntheticsTest
         self.vitalsReaders = vitalsReaders
         self.onSessionStart = onSessionStart
         self.viewCache = viewCache
-        self.fatalErrorContext = FatalErrorContextNotifier(messageBus: featureScope)
+        self.fatalErrorContext = fatalErrorContext
         self.telemetry = featureScope.telemetry
+        self.sessionEndedMetric = sessionEndedMetric
+        self.watchdogTermination = watchdogTermination
 
         if ciTest != nil {
             self.sessionType = .ciTest

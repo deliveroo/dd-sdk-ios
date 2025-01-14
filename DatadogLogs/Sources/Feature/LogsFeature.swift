@@ -16,8 +16,10 @@ internal struct LogsFeature: DatadogRemoteFeature {
 
     let logEventMapper: LogEventMapper?
 
-    @ReadWriteLock
-    private var attributes: [String: Encodable] = [:]
+    let backtraceReporter: BacktraceReporting?
+
+    /// Global attributes attached to every log event.
+    let attributes: SynchronizedAttributes
 
     /// Time provider.
     let dateProvider: DateProvider
@@ -26,7 +28,8 @@ internal struct LogsFeature: DatadogRemoteFeature {
         logEventMapper: LogEventMapper?,
         dateProvider: DateProvider,
         customIntakeURL: URL? = nil,
-        telemetry: Telemetry = NOPTelemetry()
+        telemetry: Telemetry = NOPTelemetry(),
+        backtraceReporter: BacktraceReporting? = nil
     ) {
         self.init(
             logEventMapper: logEventMapper,
@@ -39,7 +42,8 @@ internal struct LogsFeature: DatadogRemoteFeature {
                 CrashLogReceiver(dateProvider: dateProvider, logEventMapper: logEventMapper),
                 WebViewLogReceiver()
             ),
-            dateProvider: dateProvider
+            dateProvider: dateProvider,
+            backtraceReporter: backtraceReporter
         )
     }
 
@@ -47,23 +51,14 @@ internal struct LogsFeature: DatadogRemoteFeature {
         logEventMapper: LogEventMapper?,
         requestBuilder: FeatureRequestBuilder,
         messageReceiver: FeatureMessageReceiver,
-        dateProvider: DateProvider
+        dateProvider: DateProvider,
+        backtraceReporter: BacktraceReporting?
     ) {
         self.logEventMapper = logEventMapper
         self.requestBuilder = requestBuilder
         self.messageReceiver = messageReceiver
         self.dateProvider = dateProvider
-    }
-
-    internal func addAttribute(forKey key: AttributeKey, value: AttributeValue) {
-        _attributes.mutate { $0[key] = value }
-    }
-
-    internal func removeAttribute(forKey key: AttributeKey) {
-        _attributes.mutate { $0.removeValue(forKey: key) }
-    }
-
-    internal func getAttributes() -> [String: Encodable] {
-        return attributes
+        self.backtraceReporter = backtraceReporter
+        self.attributes = SynchronizedAttributes(attributes: [:])
     }
 }

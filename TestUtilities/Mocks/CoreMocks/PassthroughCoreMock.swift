@@ -27,7 +27,7 @@ import DatadogInternal
 ///     try core.register(feature: feature)
 ///     core.get(feature: MyCustomFeature.self) // returns nil
 ///
-open class PassthroughCoreMock: DatadogCoreProtocol, FeatureScope {
+open class PassthroughCoreMock: DatadogCoreProtocol, FeatureScope, @unchecked Sendable {
     /// Counts references to `PassthroughCoreMock` instances, so we can prevent memory
     /// leaks of SDK core in `DatadogTestsObserver`.
     public static var referenceCount = 0
@@ -85,10 +85,10 @@ open class PassthroughCoreMock: DatadogCoreProtocol, FeatureScope {
     /// no-op
     public func register<T>(feature: T) throws where T: DatadogFeature { }
     /// no-op
-    public func get<T>(feature type: T.Type) -> T? where T: DatadogFeature { nil }
+    public func feature<T>(named name: String, type: T.Type) -> T? { nil }
 
     /// Always returns a feature-scope.
-    public func scope<T>(for featureType: T.Type) -> FeatureScope where T : DatadogFeature {
+    public func scope<T>(for featureType: T.Type) -> FeatureScope where T: DatadogFeature {
         self
     }
 
@@ -132,5 +132,9 @@ open class PassthroughCoreMock: DatadogCoreProtocol, FeatureScope {
     /// - Returns: A list of event of the give type.
     public func events<T>(ofType type: T.Type = T.self) -> [T] where T: Encodable {
         writer.events(ofType: type)
+    }
+
+    public func mostRecentModifiedFileAt(before: Date) throws -> Date? {
+        return nil
     }
 }

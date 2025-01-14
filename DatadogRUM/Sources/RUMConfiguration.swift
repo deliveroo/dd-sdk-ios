@@ -13,6 +13,7 @@ import DatadogInternal
 @_exported import typealias DatadogInternal.DDURLSessionDelegate
 @_exported import protocol DatadogInternal.__URLSessionDelegateProviding
 @_exported import enum DatadogInternal.URLSessionInstrumentation
+@_exported import enum DatadogInternal.TraceContextInjection
 // swiftlint:enable duplicate_imports
 
 extension RUM {
@@ -109,6 +110,13 @@ extension RUM {
         ///
         /// Default: `false`.
         public var trackBackgroundEvents: Bool
+
+        /// Determines whether the SDK should track application termination by the watchdog.
+        ///
+        /// Read more about watchdog terminations at https://developer.apple.com/documentation/xcode/addressing-watchdog-terminations
+        ///
+        /// Default: `false`.
+        public var trackWatchdogTerminations: Bool
 
         /// Enables RUM long tasks tracking with the given threshold (in seconds).
         ///
@@ -207,7 +215,7 @@ extension RUM {
         ///
         /// It must be a number between 0.0 and 100.0, where 0 means no telemetry will be sent,
         /// and 100 means all telemetry will be uploaded. The default value is 20.0.
-        public var telemetrySampleRate: Float
+        public var telemetrySampleRate: SampleRate
 
         // MARK: - Nested Types
 
@@ -256,16 +264,8 @@ extension RUM {
 
         // MARK: - Internal
 
-        /// An extra sampling rate for configuration telemetry events.
-        ///
-        /// It is applied on top of the value configured in public `telemetrySampleRate`.
-        /// It can be overwritten by `InternalConfiguration`.
-        internal var configurationTelemetrySampleRate: Float = 20.0
-
-        /// An extra sampling rate for metric events.
-        ///
-        /// It is applied on top of the value configured in public `telemetrySampleRate`.
-        internal var metricsTelemetrySampleRate: Float = 15
+        /// An extra sampling rate for configuration telemetry events. It is applied on top of the value configured in public `telemetrySampleRate`.
+        internal var configurationTelemetrySampleRate: SampleRate = 20.0
 
         internal var uuidGenerator: RUMUUIDGenerator = DefaultRUMUUIDGenerator()
 
@@ -277,12 +277,17 @@ extension RUM {
         internal var mainQueue: DispatchQueue = .main
         /// Identifier of the current process, used to check if fatal App Hang originated in a previous process instance.
         internal var processID: UUID = currentProcessID
+        /// The default notification center used for subscribing to app lifecycle events and system notifications.
+        internal var notificationCenter: NotificationCenter = .default
 
         internal var debugSDK: Bool = ProcessInfo.processInfo.arguments.contains(LaunchArguments.Debug)
         internal var debugViews: Bool = ProcessInfo.processInfo.arguments.contains("DD_DEBUG_RUM")
         internal var ciTestExecutionID: String? = ProcessInfo.processInfo.environment["CI_VISIBILITY_TEST_EXECUTION_ID"]
         internal var syntheticsTestId: String? = ProcessInfo.processInfo.environment["_dd.synthetics.test_id"]
         internal var syntheticsResultId: String? = ProcessInfo.processInfo.environment["_dd.synthetics.result_id"]
+        internal var syntheticsEnvironment: Bool {
+            syntheticsTestId != nil || syntheticsResultId != nil
+        }
     }
 }
 
@@ -294,13 +299,23 @@ extension RUM.Configuration.URLSessionTracking {
         /// - Parameters:
         ///   - hosts: The set of hosts to inject tracing headers. Note: Hosts must not include the "http(s)://" prefix.
         ///   - sampleRate: The sampling rate for tracing. Must be a value between `0.0` and `100.0`. Default: `20`.
-        case trace(hosts: Set<String>, sampleRate: Float = 20)
+        ///   - traceControlInjection: The strategy for injecting trace context into requests. Default: `.all`.
+        case trace(
+            hosts: Set<String>,
+            sampleRate: Float = 20,
+            traceControlInjection: TraceContextInjection = .all
+        )
 
         /// Trace given hosts with using custom tracing headers.
         ///
         /// - `hostsWithHeaders` - Dictionary of hosts and tracing header types to use. Note: Hosts must not include "http(s)://" prefix.
         /// - `sampleRate` - The sampling rate for tracing. Must be a value between `0.0` and `100.0`. Default: `20`.
-        case traceWithHeaders(hostsWithHeaders: [String: Set<TracingHeaderType>], sampleRate: Float = 20)
+        /// - `traceControlInjection` - The strategy for injecting trace context into requests. Default: `.all`.
+        case traceWithHeaders(
+            hostsWithHeaders: [String: Set<TracingHeaderType>],
+            sampleRate: Float = 20,
+            traceControlInjection: TraceContextInjection = .all
+        )
     }
 
     /// Configuration for automatic RUM resources tracking.
@@ -328,6 +343,7 @@ extension RUM.Configuration {
     ///   - trackBackgroundEvents: Determines whether RUM events should be tracked when no view is active. Default: `false`.
     ///   - longTaskThreshold: The threshold for RUM long tasks tracking (in seconds). Default: `0.1`.
     ///   - appHangThreshold: The threshold for App Hangs monitoring (in seconds). Default: `nil`.
+    ///   - trackWatchdogTerminations: Determines whether the SDK should track application termination by the watchdog. Default: `false`.
     ///   - vitalsUpdateFrequency: The preferred frequency for collecting RUM vitals. Default: `.average`.
     ///   - viewEventMapper: Custom mapper for RUM view events. Default: `nil`.
     ///   - resourceEventMapper: Custom mapper for RUM resource events. Default: `nil`.
@@ -339,7 +355,7 @@ extension RUM.Configuration {
     ///   - telemetrySampleRate: The sampling rate for SDK internal telemetry utilized by Datadog. Must be a value between `0` and `100`. Default: `20`.
     public init(
         applicationID: String,
-        sessionSampleRate: Float = 100,
+        sessionSampleRate: SampleRate = .maxSampleRate,
         uiKitViewsPredicate: UIKitRUMViewsPredicate? = nil,
         uiKitActionsPredicate: UIKitRUMActionsPredicate? = nil,
         urlSessionTracking: URLSessionTracking? = nil,
@@ -347,6 +363,7 @@ extension RUM.Configuration {
         trackBackgroundEvents: Bool = false,
         longTaskThreshold: TimeInterval? = 0.1,
         appHangThreshold: TimeInterval? = nil,
+        trackWatchdogTerminations: Bool = false,
         vitalsUpdateFrequency: VitalsFrequency? = .average,
         viewEventMapper: RUM.ViewEventMapper? = nil,
         resourceEventMapper: RUM.ResourceEventMapper? = nil,
@@ -355,7 +372,7 @@ extension RUM.Configuration {
         longTaskEventMapper: RUM.LongTaskEventMapper? = nil,
         onSessionStart: RUM.SessionListener? = nil,
         customEndpoint: URL? = nil,
-        telemetrySampleRate: Float = 20
+        telemetrySampleRate: SampleRate = 20
     ) {
         self.applicationID = applicationID
         self.sessionSampleRate = sessionSampleRate
@@ -375,6 +392,7 @@ extension RUM.Configuration {
         self.onSessionStart = onSessionStart
         self.customEndpoint = customEndpoint
         self.telemetrySampleRate = telemetrySampleRate
+        self.trackWatchdogTerminations = trackWatchdogTerminations
     }
 }
 
@@ -383,7 +401,7 @@ extension InternalExtension where ExtendedType == RUM.Configuration {
     /// The sampling rate for configuration telemetry events. When set, it overwrites the value
     /// of `configurationTelemetrySampleRate` in `RUM.Configuration`.
     ///
-    /// It is mostly used to enable or disable telemetry events when running test scenarios.
+    /// It is used to enable or disable telemetry events on internal plugins (e.g. flutter's `DatadogRumPlugin`) and when running test scenarios.
     /// Expects value between `0.0` and `100.0`.
     public var configurationTelemetrySampleRate: Float {
         get { type.configurationTelemetrySampleRate }

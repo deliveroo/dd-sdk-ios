@@ -153,10 +153,49 @@ public struct CrossPlatformAttributes {
     /// Override the `source_type` of errors reported by the native crash handler. This is used on
     /// platforms that can supply extra steps or information on a native crash (such as Unity's IL2CPP)
     public static let nativeSourceType = "_dd.native_source_type"
+
+    /// Add "binary images" to the reportted error to assist with symbolication. Used by Unity for IL2CPP symbolicaiton
+    public static let includeBinaryImages = "_dd.error.include_binary_images"
 }
 
 public struct LaunchArguments {
     /// Each product should consider this argument to offer simple debugging experience. 
     /// For example, if this flag is present it can use no sampling.
     public static let Debug = "DD_DEBUG"
+}
+
+extension DatadogExtension where ExtendedType == [String: Any] {
+    public var swiftAttributes: [String: Encodable] {
+        type.mapValues { AnyEncodable($0) }
+    }
+}
+
+extension DatadogExtension where ExtendedType == [String: Encodable] {
+    public var objCAttributes: [String: Any] {
+        type.compactMapValues { ($0 as? AnyEncodable)?.value }
+    }
+}
+
+extension AttributeValue {
+    /// Instance Datadog extension point.
+    ///
+    /// `AttributeValue` aka `Encodable` is a protocol and cannot be extended
+    /// with conformance to`DatadogExtension`, so we need to define the `dd`
+    /// endpoint.
+    public var dd: DatadogExtension<AttributeValue> {
+        DatadogExtension(self)
+    }
+}
+
+extension DatadogExtension where ExtendedType == AttributeValue {
+    public func decode<T>(_: T.Type = T.self) -> T? {
+        switch type {
+        case let encodable as _AnyEncodable:
+            return encodable.value as? T
+        case let val as T:
+            return val
+        default:
+            return nil
+        }
+    }
 }

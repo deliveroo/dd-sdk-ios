@@ -10,8 +10,6 @@ internal class ImagesViewController: UIViewController {
     @IBOutlet weak var customButton: UIButton!
     @IBOutlet weak var customImageView: UIImageView!
     @IBOutlet weak var contentImageView: UIImageView!
-    @IBOutlet weak var tabBar: UITabBar!
-    @IBOutlet weak var navigationBar: UINavigationBar!
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -21,10 +19,6 @@ internal class ImagesViewController: UIViewController {
 
         let color = UIColor(white: 0, alpha: 0.05)
         customButton.setBackgroundImage(UIImage(color: color), for: .normal)
-
-        tabBar.backgroundImage = UIImage(color: color)
-        tabBar.selectedItem = tabBar.items?.first
-        navigationBar.setBackgroundImage(UIImage(color: color), for: .default)
 
         let image = UIImage(named: "dd_logo", in: .module, with: nil)
         customImageView.image = image?.withRenderingMode(.alwaysTemplate)
@@ -39,11 +33,15 @@ fileprivate extension UIImage {
         UIGraphicsBeginImageContextWithOptions(rect.size, false, 1.0)
         defer { UIGraphicsEndImageContext() }
 
-        guard let context = UIGraphicsGetCurrentContext() else { return nil }
+        guard let context = UIGraphicsGetCurrentContext() else {
+            return nil
+        }
         context.setFillColor(color.cgColor)
         context.fill(rect)
 
-        guard let cgImage = context.makeImage() else { return nil }
+        guard let cgImage = context.makeImage() else {
+            return nil
+        }
         self.init(cgImage: cgImage)
     }
 }

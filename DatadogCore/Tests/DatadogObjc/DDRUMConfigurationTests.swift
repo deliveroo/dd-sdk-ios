@@ -106,6 +106,19 @@ class DDRUMConfigurationTests: XCTestCase {
         XCTAssertEqual(swift.longTaskThreshold, random)
     }
 
+    func testAppHangThreshold() {
+        let random: TimeInterval = .mockRandom(min: 0.01, max: .greatestFiniteMagnitude)
+        objc.appHangThreshold = random
+        XCTAssertEqual(objc.appHangThreshold, random)
+        XCTAssertEqual(swift.appHangThreshold, random)
+    }
+
+    func testAppHangThresholdDisable() {
+        objc.appHangThreshold = 0
+        XCTAssertEqual(objc.appHangThreshold, 0)
+        XCTAssertEqual(swift.appHangThreshold, nil)
+    }
+
     func testVitalsUpdateFrequency() {
         objc.vitalsUpdateFrequency = .frequent
         XCTAssertEqual(swift.vitalsUpdateFrequency, .frequent)

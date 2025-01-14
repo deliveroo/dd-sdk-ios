@@ -64,26 +64,12 @@ internal typealias RUMErrorSourceType = RUMErrorEvent.Error.SourceType
 
 internal extension RUMErrorSourceType {
     static func extract(from attributes: inout [AttributeKey: AttributeValue]) -> RUMErrorSourceType? {
-        return (attributes.removeValue(forKey: CrossPlatformAttributes.errorSourceType))
-            .flatMap({
-                $0.decoded()
-            })
+        return attributes
+            .removeValue(forKey: CrossPlatformAttributes.errorSourceType)?
+            .dd.decode()
             .flatMap {
-                return RUMErrorEvent.Error.SourceType(rawValue: $0)
+                RUMErrorEvent.Error.SourceType(rawValue: $0)
             }
-    }
-}
-
-internal extension AttributeValue {
-    func decoded<T>() -> T? {
-        switch self {
-        case let codable as AnyCodable:
-            return codable.value as? T
-        case let val as T:
-            return val
-        default:
-            return nil
-        }
     }
 }
 
@@ -114,14 +100,18 @@ internal class Monitor: RUMCommandSubscriber {
     let featureScope: FeatureScope
     let scopes: RUMApplicationScope
     let dateProvider: DateProvider
-    let queue = DispatchQueue(
-        label: "com.datadoghq.rum-monitor",
-        target: .global(qos: .userInteractive)
-    )
 
+    @ReadWriteLock
     private(set) var debugging: RUMDebugging? = nil
 
-    private var attributes: [AttributeKey: AttributeValue] = [:]
+    @ReadWriteLock
+    private var attributes: [AttributeKey: AttributeValue] = [:] {
+        didSet {
+            fatalErrorContext.globalAttributes = attributes
+        }
+    }
+
+    private let fatalErrorContext: FatalErrorContextNotifying
 
     init(
         dependencies: RUMScopeDependencies,
@@ -130,43 +120,50 @@ internal class Monitor: RUMCommandSubscriber {
         self.featureScope = dependencies.featureScope
         self.scopes = RUMApplicationScope(dependencies: dependencies)
         self.dateProvider = dateProvider
+        self.fatalErrorContext = dependencies.fatalErrorContext
     }
 
     func process(command: RUMCommand) {
+        var command = command
+        command.globalAttributes = attributes
         // process command in event context
-        featureScope.eventWriteContext { context, writer in
-            self.queue.sync {
-                let transformedCommand = self.transform(command: command)
+        featureScope.eventWriteContext { [weak self] context, writer in
+            guard let self = self else {
+                return
+            }
 
-                _ = self.scopes.process(command: transformedCommand, context: context, writer: writer)
+            let transformedCommand = self.transform(command: command)
 
-                if let debugging = self.debugging {
-                    debugging.debug(applicationScope: self.scopes)
-                }
+            _ = self.scopes.process(command: transformedCommand, context: context, writer: writer)
+
+            if let debugging = self.debugging {
+                debugging.debug(applicationScope: self.scopes)
             }
         }
 
         // update the core context with rum context
         featureScope.set(
-            baggage: {
-                self.queue.sync { () -> RUMCoreContext? in
-                    let context = self.scopes.activeSession?.viewScopes.last?.context ??
-                                    self.scopes.activeSession?.context ??
-                                    self.scopes.context
-
-                    guard context.sessionID != .nullUUID else {
-                        // if Session was sampled or not yet started
-                        return nil
-                    }
-
-                    return RUMCoreContext(
-                        applicationID: context.rumApplicationID,
-                        sessionID: context.sessionID.rawValue.uuidString.lowercased(),
-                        viewID: context.activeViewID?.rawValue.uuidString.lowercased(),
-                        userActionID: context.activeUserActionID?.rawValue.uuidString.lowercased(),
-                        viewServerTimeOffset: self.scopes.activeSession?.viewScopes.last?.serverTimeOffset
-                    )
+            baggage: { [weak self] () -> RUMCoreContext? in
+                guard let self = self else {
+                    return nil
                 }
+
+                let context = self.scopes.activeSession?.viewScopes.last?.context ??
+                                self.scopes.activeSession?.context ??
+                                self.scopes.context
+
+                guard context.sessionID != .nullUUID else {
+                    // if Session was sampled or not yet started
+                    return nil
+                }
+
+                return RUMCoreContext(
+                    applicationID: context.rumApplicationID,
+                    sessionID: context.sessionID.rawValue.uuidString.lowercased(),
+                    viewID: context.activeViewID?.rawValue.uuidString.lowercased(),
+                    userActionID: context.activeUserActionID?.rawValue.uuidString.lowercased(),
+                    viewServerTimeOffset: self.scopes.activeSession?.viewScopes.last?.serverTimeOffset
+                )
             },
             forKey: RUMFeature.name
         )
@@ -182,15 +179,10 @@ internal class Monitor: RUMCommandSubscriber {
     func transform(command: RUMCommand) -> RUMCommand {
         var mutableCommand = command
 
-        var combinedUserAttributes = attributes
-        combinedUserAttributes.merge(rumCommandAttributes: command.attributes)
-
-        if let customTimestampInMiliseconds = combinedUserAttributes.removeValue(forKey: CrossPlatformAttributes.timestampInMilliseconds) as? Int64 {
-            let customTimeInterval = TimeInterval(fromMilliseconds: customTimestampInMiliseconds)
+        if let customTimestampInMilliseconds: Int64 = mutableCommand.attributes.removeValue(forKey: CrossPlatformAttributes.timestampInMilliseconds)?.dd.decode() {
+            let customTimeInterval = TimeInterval(fromMilliseconds: customTimestampInMilliseconds)
             mutableCommand.time = Date(timeIntervalSince1970: customTimeInterval)
         }
-
-        mutableCommand.attributes = combinedUserAttributes
 
         return mutableCommand
     }
@@ -201,37 +193,30 @@ extension Monitor: RUMMonitorProtocol {
     // MARK: - attributes
 
     func addAttribute(forKey key: AttributeKey, value: AttributeValue) {
-        queue.async {
-            self.attributes[key] = value
-        }
+        attributes[key] = value
     }
 
     func removeAttribute(forKey key: AttributeKey) {
-        queue.async {
-            self.attributes[key] = nil
-        }
+        attributes[key] = nil
     }
 
     // MARK: - session
 
     func currentSessionID(completion: @escaping (String?) -> Void) {
-        // Even though we're not writing anything, need to get the write context
-        // to make sure we're returning the correct sessionId after all other
-        // events have processed.
-        featureScope.eventWriteContext { _, _ in
-            self.queue.sync {
-                guard let sessionId = self.scopes.activeSession?.sessionUUID else {
-                    completion(nil)
-                    return
-                }
-
-                var sessionIdValue: String? = nil
-                if sessionId != RUMUUID.nullUUID {
-                    sessionIdValue = sessionId.rawValue.uuidString
-                }
-
-                completion(sessionIdValue)
+        // Synchronise it through the context thread to make sure we return the correct
+        // sessionID after all other events have been processed (also on the context thread):
+        featureScope.context { [weak self] _ in
+            guard let sessionId = self?.scopes.activeSession?.sessionUUID else {
+                completion(nil)
+                return
             }
+
+            var sessionIdValue: String? = nil
+            if sessionId != RUMUUID.nullUUID {
+                sessionIdValue = sessionId.rawValue.uuidString
+            }
+
+            completion(sessionIdValue)
         }
     }
 
@@ -248,7 +233,8 @@ extension Monitor: RUMMonitorProtocol {
                 identity: ViewIdentifier(viewController),
                 name: name ?? viewController.canonicalClassName,
                 path: viewController.canonicalClassName,
-                attributes: attributes
+                attributes: attributes,
+                instrumentationType: .manual
             )
         )
     }
@@ -270,7 +256,8 @@ extension Monitor: RUMMonitorProtocol {
                 identity: ViewIdentifier(key),
                 name: name ?? key,
                 path: key,
-                attributes: attributes
+                attributes: attributes,
+                instrumentationType: .manual
             )
         )
     }
@@ -281,6 +268,16 @@ extension Monitor: RUMMonitorProtocol {
                 time: dateProvider.now,
                 attributes: attributes,
                 identity: ViewIdentifier(key)
+            )
+        )
+    }
+
+    func addViewLoadingTime(overwrite: Bool) {
+        process(
+            command: RUMAddViewLoadingTime(
+                time: dateProvider.now,
+                attributes: [:],
+                overwrite: overwrite
             )
         )
     }
@@ -456,6 +453,7 @@ extension Monitor: RUMMonitorProtocol {
             command: RUMAddUserActionCommand(
                 time: dateProvider.now,
                 attributes: attributes,
+                instrumentation: .manual,
                 actionType: type,
                 name: name
             )
@@ -467,6 +465,7 @@ extension Monitor: RUMMonitorProtocol {
             command: RUMStartUserActionCommand(
                 time: dateProvider.now,
                 attributes: attributes,
+                instrumentation: .manual,
                 actionType: type,
                 name: name
             )
@@ -500,15 +499,19 @@ extension Monitor: RUMMonitorProtocol {
 
     var debug: Bool {
         set {
-            queue.async {
-                self.debugging = newValue ? RUMDebugging() : nil
+            debugging = newValue ? RUMDebugging() : nil
+
+            // Synchronise `debug(applicationScope:)` through the context thread to make sure it can safely
+            // read `scopes` after all events have been processed (also on the context thread):
+            featureScope.context { [weak self] _ in
+                guard let self = self else {
+                    return
+                }
                 self.debugging?.debug(applicationScope: self.scopes)
             }
         }
         get {
-            queue.sync {
-                self.debugging != nil
-            }
+            debugging != nil
         }
     }
 }
@@ -539,10 +542,5 @@ extension Monitor {
                 attributes: attributes
             )
         )
-    }
-
-    /// Completes all asynchronous operations with blocking the caller thread.
-    func flush() {
-        queue.sync { }
     }
 }

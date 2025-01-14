@@ -7,11 +7,6 @@
 #if os(iOS)
 import UIKit
 
-internal struct RecordingResult {
-    let nodes: [Node]
-    let resources: [Resource]
-}
-
 internal struct ViewTreeRecorder {
     /// An array of enabled node recorders.
     ///
@@ -20,20 +15,19 @@ internal struct ViewTreeRecorder {
     let nodeRecorders: [NodeRecorder]
 
     /// Creates `Nodes` for given view and its subtree hierarchy.
-    func record(_ anyView: UIView, in context: ViewTreeRecordingContext) -> RecordingResult {
+    func record(_ anyView: UIView, in context: ViewTreeRecordingContext) -> [Node] {
         var nodes: [Node] = []
-        var resources: [Resource] = []
-        recordRecursively(nodes: &nodes, resources: &resources, view: anyView, context: context)
-        return RecordingResult(nodes: nodes, resources: resources)
+        recordRecursively(nodes: &nodes, view: anyView, context: context, overrides: anyView.dd.sessionReplayPrivacyOverrides)
+        return nodes
     }
 
     // MARK: - Private
 
     private func recordRecursively(
         nodes: inout [Node],
-        resources: inout [Resource],
         view: UIView,
-        context: ViewTreeRecordingContext
+        context: ViewTreeRecordingContext,
+        overrides: PrivacyOverrides
     ) {
         var context = context
         if let viewController = view.next as? UIViewController {
@@ -43,31 +37,34 @@ internal struct ViewTreeRecorder {
             context.viewControllerContext.isRootView = false
         }
 
-        let semantics = nodeSemantics(for: view, in: context)
+        // Convert the frame in root view space
+        let frame = view.convert(view.bounds, to: context.coordinateSpace)
+
+        if view.clipsToBounds {
+            // Propagate view's clipping intersection when clipsToBounds is
+            // enabled.
+            context.clip = frame.intersection(context.clip)
+        }
+
+        let attributes = ViewAttributes(view: view, frame: frame, clip: context.clip, overrides: overrides)
+        let semantics = nodeSemantics(for: view, with: attributes, in: context)
 
         if !semantics.nodes.isEmpty {
             nodes.append(contentsOf: semantics.nodes)
-        }
-        if !semantics.resources.isEmpty {
-            resources.append(contentsOf: semantics.resources)
         }
 
         switch semantics.subtreeStrategy {
         case .record:
             for subview in view.subviews {
-                recordRecursively(nodes: &nodes, resources: &resources, view: subview, context: context)
+                let subviewOverrides = SessionReplayPrivacyOverrides.merge(subview.dd.sessionReplayPrivacyOverrides, with: overrides)
+                recordRecursively(nodes: &nodes, view: subview, context: context, overrides: subviewOverrides)
             }
         case .ignore:
             break
         }
     }
 
-    private func nodeSemantics(for view: UIView, in context: ViewTreeRecordingContext) -> NodeSemantics {
-        let attributes = ViewAttributes(
-            frameInRootView: view.convert(view.bounds, to: context.coordinateSpace),
-            view: view
-        )
-
+    private func nodeSemantics(for view: UIView, with attributes: ViewAttributes, in context: ViewTreeRecordingContext) -> NodeSemantics {
         var semantics: NodeSemantics = UnknownElement.constant
 
         for nodeRecorder in nodeRecorders {

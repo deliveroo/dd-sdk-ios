@@ -36,20 +36,28 @@ internal class DatadogCoreProxy: DatadogCoreProtocol {
     @ReadWriteLock
     private var featureScopeInterceptors: [String: FeatureScopeInterceptor] = [:]
 
-    init(context: DatadogContext = .mockAny()) {
-        self.context = context
-        self.core = DatadogCore(
-            directory: temporaryCoreDirectory,
-            dateProvider: SystemDateProvider(),
-            initialConsent: context.trackingConsent,
-            performance: .mockAny(),
-            httpClient: HTTPClientMock(),
-            encryption: nil,
-            contextProvider: DatadogContextProvider(context: context),
-            applicationVersion: context.version,
-            maxBatchesPerUpload: .mockRandom(min: 1, max: 100),
-            backgroundTasksEnabled: .mockAny()
+    convenience init(context: DatadogContext = .mockAny()) {
+        self.init(
+            core: DatadogCore(
+                directory: temporaryCoreDirectory,
+                dateProvider: SystemDateProvider(),
+                initialConsent: context.trackingConsent,
+                performance: .mockAny(),
+                httpClient: HTTPClientMock(),
+                encryption: nil,
+                contextProvider: DatadogContextProvider(
+                    context: context
+                ),
+                applicationVersion: context.version,
+                maxBatchesPerUpload: .mockRandom(min: 1, max: 100),
+                backgroundTasksEnabled: .mockAny()
+            )
         )
+    }
+
+    init(core: DatadogCore) {
+        self.context = core.contextProvider.read()
+        self.core = core
 
         // override the message-bus's core instance
         core.bus.connect(core: self)
@@ -70,8 +78,8 @@ internal class DatadogCoreProxy: DatadogCoreProtocol {
         try core.register(feature: feature)
     }
 
-    func get<T>(feature type: T.Type) -> T? where T: DatadogFeature {
-        return core.get(feature: type)
+    func feature<T>(named name: String, type: T.Type) -> T? {
+        return core.feature(named: name, type: type)
     }
 
     func scope<T>(for featureType: T.Type) -> FeatureScope where T: DatadogFeature {
@@ -90,6 +98,10 @@ internal class DatadogCoreProxy: DatadogCoreProtocol {
 
     func send(message: FeatureMessage, else fallback: @escaping () -> Void) {
         core.send(message: message, else: fallback)
+    }
+
+    func mostRecentModifiedFileAt(before: Date) throws -> Date? {
+        return try core.mostRecentModifiedFileAt(before: before)
     }
 }
 
@@ -142,7 +154,7 @@ private struct FeatureScopeProxy: FeatureScope {
     }
 }
 
-private class FeatureScopeInterceptor {
+private final class FeatureScopeInterceptor: @unchecked Sendable {
     struct InterceptingWriter: Writer {
         static let jsonEncoder = JSONEncoder.dd.default()
 

@@ -15,17 +15,21 @@ internal struct DistributedTracing {
     let spanIDGenerator: SpanIDGenerator
     /// First party hosts defined by the user.
     let firstPartyHosts: FirstPartyHosts
+    /// Trace context injection configuration to determine whether the trace context should be injected or not.
+    let traceContextInjection: TraceContextInjection
 
     init(
         sampler: Sampler,
         firstPartyHosts: FirstPartyHosts,
         traceIDGenerator: TraceIDGenerator,
-        spanIDGenerator: SpanIDGenerator
+        spanIDGenerator: SpanIDGenerator,
+        traceContextInjection: TraceContextInjection
     ) {
         self.sampler = sampler
         self.traceIDGenerator = traceIDGenerator
         self.spanIDGenerator = spanIDGenerator
         self.firstPartyHosts = firstPartyHosts
+        self.traceContextInjection = traceContextInjection
     }
 }
 
@@ -65,12 +69,8 @@ internal final class URLSessionRUMResourcesHandler: DatadogURLSessionHandler, RU
 
     // MARK: - DatadogURLSessionHandler
 
-    func modify(request: URLRequest, headerTypes: Set<DatadogInternal.TracingHeaderType>) -> URLRequest {
-        distributedTracing?.modify(request: request, headerTypes: headerTypes) ?? request
-    }
-
-    func traceContext() -> DatadogInternal.TraceContext? {
-        nil // no-op
+    func modify(request: URLRequest, headerTypes: Set<DatadogInternal.TracingHeaderType>) -> (URLRequest, TraceContext?) {
+        distributedTracing?.modify(request: request, headerTypes: headerTypes) ?? (request, nil)
     }
 
     func interceptionDidStart(interception: DatadogInternal.URLSessionTaskInterception) {
@@ -148,52 +148,63 @@ internal final class URLSessionRUMResourcesHandler: DatadogURLSessionHandler, RU
 }
 
 extension DistributedTracing {
-    func modify(request: URLRequest, headerTypes: Set<DatadogInternal.TracingHeaderType>) -> URLRequest {
+    func modify(request: URLRequest, headerTypes: Set<DatadogInternal.TracingHeaderType>) -> (URLRequest, TraceContext?) {
         let traceID = traceIDGenerator.generate()
         let spanID = spanIDGenerator.generate()
+        let injectedSpanContext = TraceContext(
+            traceID: traceID,
+            spanID: spanID,
+            parentSpanID: nil,
+            sampleRate: sampler.samplingRate,
+            isKept: sampler.sample()
+        )
 
         var request = request
+        var hasSetAnyHeader = false
         headerTypes.forEach {
             let writer: TracePropagationHeadersWriter
             switch $0 {
             case .datadog:
-                writer = HTTPHeadersWriter(sampler: sampler)
+                writer = HTTPHeadersWriter(
+                    samplingStrategy: .headBased,
+                    traceContextInjection: traceContextInjection
+                )
                 // To make sure the generated traces from RUM don’t affect APM Index Spans counts.
                 request.setValue("rum", forHTTPHeaderField: TracingHTTPHeaders.originField)
             case .b3:
                 writer = B3HTTPHeadersWriter(
-                    sampler: sampler,
-                    injectEncoding: .single
+                    samplingStrategy: .headBased,
+                    injectEncoding: .single,
+                    traceContextInjection: traceContextInjection
                 )
             case .b3multi:
                 writer = B3HTTPHeadersWriter(
-                    sampler: sampler,
-                    injectEncoding: .multiple
+                    samplingStrategy: .headBased,
+                    injectEncoding: .multiple,
+                    traceContextInjection: traceContextInjection
                 )
             case .tracecontext:
                 writer = W3CHTTPHeadersWriter(
-                    sampler: sampler,
+                    samplingStrategy: .headBased,
                     tracestate: [
                         W3CHTTPHeaders.Constants.origin: W3CHTTPHeaders.Constants.originRUM
-                    ]
+                    ],
+                    traceContextInjection: traceContextInjection
                 )
             }
 
-            writer.write(
-                traceID: traceID,
-                spanID: spanID,
-                parentSpanID: nil
-            )
+            writer.write(traceContext: injectedSpanContext)
 
             writer.traceHeaderFields.forEach { field, value in
                 // do not overwrite existing header
                 if request.value(forHTTPHeaderField: field) == nil {
+                    hasSetAnyHeader = true
                     request.setValue(value, forHTTPHeaderField: field)
                 }
             }
         }
 
-        return request
+        return (request, (hasSetAnyHeader && injectedSpanContext.isKept) ? injectedSpanContext : nil)
     }
 
     func trace(from interception: DatadogInternal.URLSessionTaskInterception) -> RUMSpanContext? {
@@ -201,7 +212,7 @@ extension DistributedTracing {
             .init(
                 traceID: $0.traceID,
                 spanID: $0.spanID,
-                samplingRate: Double(sampler.samplingRate) / 100.0
+                samplingRate: Double(sampler.samplingRate.percentageProportion)
             )
         }
     }

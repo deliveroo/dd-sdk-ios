@@ -26,7 +26,7 @@ import WebKit
 public enum WebViewTracking {
 #if !os(tvOS)
     /// Enables SDK to correlate Datadog RUM events and Logs from the WebView with native RUM session.
-    ///
+    /// 
     /// If the content loaded in WebView uses Datadog Browser SDK (`v4.2.0+`) and matches specified
     /// `hosts`, web events will be correlated with the RUM session from native SDK.
     ///
@@ -39,7 +39,7 @@ public enum WebViewTracking {
     public static func enable(
         webView: WKWebView,
         hosts: Set<String> = [],
-        logsSampleRate: Float = 100,
+        logsSampleRate: SampleRate = .maxSampleRate,
         in core: DatadogCoreProtocol = CoreRegistry.default
     ) {
         enable(
@@ -106,15 +106,37 @@ public enum WebViewTracking {
             .map { return "\"\($0)\"" }
             .joined(separator: ",")
 
+        let sessionReplay = core.feature(
+            named: SessionReplayFeaturneName,
+            type: SessionReplayConfiguration.self
+        )
+
+        let privacyLevel = sessionReplay.map {
+            Self.determineWebViewPrivacyLevel(
+                textPrivacy: $0.textAndInputPrivacyLevel,
+                imagePrivacy: $0.imagePrivacyLevel,
+                touchPrivacy: $0.touchPrivacyLevel
+            )
+        } ?? .mask
+
+        // Share native capabilities with Browser SDK
+        let capabilities = sessionReplay != nil ? "\"records\"" : ""
+
         let js = """
         \(Self.jsCodePrefix)
         window.\(bridgeName) = {
-          send(msg) {
-            \(webkitMethodName)(msg)
-          },
-          getAllowedWebViewHosts() {
-            return '[\(allowedWebViewHostsString)]'
-          }
+            send(msg) {
+                \(webkitMethodName)(msg)
+            },
+            getAllowedWebViewHosts() {
+                return '[\(allowedWebViewHostsString)]'
+            },
+            getCapabilities() {
+                return '[\(capabilities)]'
+            },
+            getPrivacyLevel() {
+                return '\(privacyLevel.rawValue)'
+            }
         }
         """
 
@@ -126,6 +148,39 @@ public enum WebViewTracking {
             )
         )
     }
+
+    /// Conversion matrix from global privacy level to fine-grained privaly levels.
+    /// Although `SessionReplayPrivacyLevel` is deprecated on mobile,
+    /// it is still needed to configure the browser SDK for the web integration,
+    /// which currently doesn't support fine-grained priavcy options.
+    internal static func determineWebViewPrivacyLevel(
+            textPrivacy: TextAndInputPrivacyLevel,
+            imagePrivacy: ImagePrivacyLevel,
+            touchPrivacy: TouchPrivacyLevel
+        ) -> SessionReplayPrivacyLevel {
+            switch (textPrivacy, imagePrivacy, touchPrivacy) {
+            case (.maskSensitiveInputs, .maskNone, .show):
+                return .allow
+            case (.maskSensitiveInputs, .maskNone, .hide):
+                return .mask
+            case (.maskSensitiveInputs, .maskNonBundledOnly, _):
+                return .mask
+            case (.maskSensitiveInputs, .maskAll, _):
+                return .mask
+
+            case (.maskAllInputs, .maskNone, .show):
+                return .maskUserInput
+            case (.maskAllInputs, .maskNone, .hide):
+                return .mask
+            case (.maskAllInputs, .maskNonBundledOnly, _):
+                return .mask
+            case (.maskAllInputs, .maskAll, _):
+                return .mask
+
+            case (.maskAll, _, _):
+                return .mask
+            }
+        }
 #endif
 }
 
@@ -150,7 +205,7 @@ extension InternalExtension where ExtendedType == WebViewTracking {
     /// - Returns: A `MessageEmitter` instance
     public static func messageEmitter(
         in core: DatadogCoreProtocol,
-        logsSampleRate: Float = 100
+        logsSampleRate: SampleRate = .maxSampleRate
     ) -> AbstractMessageEmitter {
         return MessageEmitter(
             logsSampler: Sampler(samplingRate: logsSampleRate),

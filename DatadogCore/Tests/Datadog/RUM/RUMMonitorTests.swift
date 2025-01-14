@@ -35,7 +35,7 @@ class RUMMonitorTests: XCTestCase {
         // Given
         var capturedSession: String?
         config.dateProvider = RelativeDateProvider(startingFrom: Date(), advancingBySeconds: 1)
-        config.sessionSampleRate = 100.0
+        config.sessionSampleRate = .maxSampleRate
         config.onSessionStart = { session, sampled in
             capturedSession = session
         }
@@ -75,7 +75,7 @@ class RUMMonitorTests: XCTestCase {
     func testWhenSessionIsStopped_itReturnsNil() throws {
         // Given
         config.dateProvider = RelativeDateProvider(startingFrom: Date(), advancingBySeconds: 1)
-        config.sessionSampleRate = 100.0
+        config.sessionSampleRate = .maxSampleRate
         RUM.enable(with: config, in: core)
         let monitor = RUMMonitor.shared(in: core)
 
@@ -612,6 +612,40 @@ class RUMMonitorTests: XCTestCase {
             }
     }
 
+    func testStartingView_thenSendingActionEvents() throws {
+        config.dateProvider = RelativeDateProvider(startingFrom: Date(), advancingBySeconds: 1)
+        RUM.enable(with: config, in: core)
+
+        let monitor = RUMMonitor.shared(in: core)
+
+        monitor.startView(viewController: mockView)
+
+        monitor.addAction(type: .tap, name: "tap action", attributes: ["event-attribute1": "foo1"])
+
+        monitor.startAction(type: .swipe, name: "swipe action", attributes: ["event-attribute1": "foo1"])
+        monitor.stopAction(type: .swipe, name: "swipe action", attributes: ["event-attribute2": "foo2"])
+
+        let rumEventMatchers = try core.waitAndReturnRUMEventMatchers()
+
+        let actionEvents = rumEventMatchers.filterRUMEvents(ofType: RUMActionEvent.self)
+        XCTAssertEqual(actionEvents.count, 3)
+
+        let event1Matcher = actionEvents[0]
+        let event1: RUMActionEvent = try event1Matcher.model()
+        XCTAssertEqual(event1.action.type, .applicationStart)
+
+        let event2Matcher = actionEvents[1]
+        let event2: RUMActionEvent = try event2Matcher.model()
+        XCTAssertEqual(event2.action.type, .tap)
+        XCTAssertEqual(try event2Matcher.attribute(forKeyPath: "context.event-attribute1"), "foo1")
+
+        let event3Matcher = actionEvents[2]
+        let event3: RUMActionEvent = try event3Matcher.model()
+        XCTAssertEqual(event3.action.type, .swipe)
+        XCTAssertEqual(try event3Matcher.attribute(forKeyPath: "context.event-attribute1"), "foo1")
+        XCTAssertEqual(try event3Matcher.attribute(forKeyPath: "context.event-attribute2"), "foo2")
+    }
+
     // MARK: - Sending user info
 
     func testWhenUserInfoIsProvided_itIsSendWithAllEvents() throws {
@@ -642,7 +676,7 @@ class RUMMonitorTests: XCTestCase {
         monitor.stopView(viewController: mockView)
 
         let rumEventMatchers = try core.waitAndReturnRUMEventMatchers()
-        let expectedUserInfo = RUMUser(email: "foo@bar.com", id: "abc-123", name: "Foo", usrInfo: [
+        let expectedUserInfo = RUMUser(anonymousId: nil, email: "foo@bar.com", id: "abc-123", name: "Foo", usrInfo: [
             "str": AnyEncodable("value"),
             "int": AnyEncodable(11_235),
             "bool": AnyEncodable(true)
@@ -1220,7 +1254,7 @@ class RUMMonitorTests: XCTestCase {
             case 10: monitor.addAction(type: .tap, name: .mockRandom())
             case 11: monitor.addAttribute(forKey: String.mockRandom(), value: String.mockRandom())
             case 12: monitor.removeAttribute(forKey: String.mockRandom())
-            case 13: monitor.dd.debug = .mockRandom()
+            case 13: monitor.debug = .mockRandom()
             default: break
             }
         }
@@ -1435,7 +1469,7 @@ class RUMMonitorTests: XCTestCase {
         for matcher in matchers.filterTelemetry() {
             // Application Start/Launch happens too early to have attributes set.
             if (try? matcher.attribute(forKeyPath: "action.type")) == "application_start" ||
-               (try? matcher.attribute(forKeyPath: "view.name")) == "ApplicationLaunch"{
+               (try? matcher.attribute(forKeyPath: "view.name")) == "ApplicationLaunch" {
                 continue
             }
             expectedAttributes.forEach { attrKey, attrValue in

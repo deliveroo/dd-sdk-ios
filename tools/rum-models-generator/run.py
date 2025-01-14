@@ -15,7 +15,7 @@ import traceback
 import subprocess
 from dataclasses import dataclass
 
-SCHEMAS_REPO_SSH = 'git@github.com:DataDog/rum-events-format.git'
+SCHEMAS_REPO = 'https://github.com/DataDog/rum-events-format.git'
 
 # JSON Schema paths (relative to cwd)
 RUM_SCHEMA_PATH = '/rum-events-format/rum-events-format.json'
@@ -48,6 +48,9 @@ class Context:
 
     # Resolved path to source code file with Session Replay model definitions (Swift)
     sr_swift_generated_file_path: str
+
+    # List of type names to skip from code generation in Objective-C
+    skip_objc: [str]
 
     def __repr__(self):
         return f"""
@@ -104,7 +107,7 @@ def clone_schemas_repo(git_ref: str):
     """
     print(f'⚙️ Cloning `rum-events-format` repository at "{git_ref}"...')
     shell_output('rm -rf rum-events-format')
-    shell_output(f'git clone {SCHEMAS_REPO_SSH}')
+    shell_output(f'git clone {SCHEMAS_REPO}')
     shell_output(f'cd rum-events-format && git fetch origin {git_ref} && git checkout FETCH_HEAD')
     sha = shell_output(f'cd rum-events-format && git rev-parse HEAD')
     return sha
@@ -135,7 +138,11 @@ def generate_code(ctx: Context, language: str, convention: str, json_schema: str
     :param git_sha: the commit from `rum-events-format` repo that JSON schema comes from
     :return: generated code as it should be written to target `*.swift` file
     """
-    cli_command = f'{ctx.cli_executable_path} generate-{language} --convention {convention} --path "{json_schema}"'
+    skip = ""
+    if language == 'objc':
+        skip = f' --skip {" ".join(ctx.skip_objc)}'
+
+    cli_command = f'{ctx.cli_executable_path} generate-{language} --convention {convention} --path "{json_schema}" {skip}'
     code = shell_output(cli_command)
     code += f'// Generated from https://github.com/DataDog/rum-events-format/tree/{git_sha}'
     return code
@@ -218,6 +225,7 @@ if __name__ == "__main__":
     parser.add_argument("command", choices=['generate', 'verify'], help="Run mode")
     parser.add_argument("product", choices=['rum', 'sr'], help="Either 'rum' (RUM) or 'sr' (Session Replay)")
     parser.add_argument("--git_ref", help="The git reference to clone `rum-events-format` repo at (only effective for `generate` command).")
+    parser.add_argument("--skip_objc", help="List of type names to skip in Objective-C generation", nargs='*', type=str, default=[])
     args = parser.parse_args()
 
     try:
@@ -229,6 +237,7 @@ if __name__ == "__main__":
             rum_swift_generated_file_path=os.path.abspath(f'{repository_root}/{RUM_SWIFT_GENERATED_FILE_PATH}'),
             rum_objc_generated_file_path=os.path.abspath(f'{repository_root}/{RUM_OBJC_GENERATED_FILE_PATH}'),
             sr_swift_generated_file_path=os.path.abspath(f'{repository_root}/{SR_SWIFT_GENERATED_FILE_PATH}'),
+            skip_objc=args.skip_objc
         )
 
         print(f'⚙️ Generation context: {context}')

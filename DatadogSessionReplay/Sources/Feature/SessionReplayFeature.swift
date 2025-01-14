@@ -8,12 +8,13 @@
 import Foundation
 import DatadogInternal
 
-internal class SessionReplayFeature: DatadogRemoteFeature {
-    static let name: String = "session-replay"
-
+internal class SessionReplayFeature: SessionReplayConfiguration, DatadogRemoteFeature {
     let requestBuilder: FeatureRequestBuilder
     let messageReceiver: FeatureMessageReceiver
     let performanceOverride: PerformancePresetOverride?
+    let textAndInputPrivacyLevel: TextAndInputPrivacyLevel
+    let imagePrivacyLevel: ImagePrivacyLevel
+    let touchPrivacyLevel: TouchPrivacyLevel
 
     // MARK: - Main Components
 
@@ -26,34 +27,59 @@ internal class SessionReplayFeature: DatadogRemoteFeature {
         core: DatadogCoreProtocol,
         configuration: SessionReplay.Configuration
     ) throws {
-        let processorsQueue = BackgroundAsyncQueue(named: "com.datadoghq.session-replay.processors")
-        let snapshotProcessor = SnapshotProcessor(
-            queue: processorsQueue,
-            recordWriter: RecordWriter(core: core),
-            srContextPublisher: SRContextPublisher(core: core),
-            telemetry: core.telemetry
+        let processorsQueue = BackgroundAsyncQueue(label: "com.datadoghq.session-replay.processors", qos: .utility)
+        // The telemetry queue targets the processors queue with a lower qos.
+        let telemetryQueue = BackgroundAsyncQueue(label: "com.datadoghq.session-replay.telemetry", qos: .background, target: processorsQueue)
+
+        let telemetry = SessionReplayTelemetry(
+            telemetry: core.telemetry,
+            queue: telemetryQueue
         )
+
         let resourceProcessor = ResourceProcessor(
             queue: processorsQueue,
             resourcesWriter: ResourcesWriter(scope: core.scope(for: ResourcesFeature.self))
         )
+
+        let snapshotProcessor = SnapshotProcessor(
+            queue: processorsQueue,
+            recordWriter: RecordWriter(core: core),
+            resourceProcessor: resourceProcessor,
+            srContextPublisher: SRContextPublisher(core: core),
+            telemetry: telemetry
+        )
+
         let recorder = try Recorder(
             snapshotProcessor: snapshotProcessor,
-            resourceProcessor: resourceProcessor,
-            telemetry: core.telemetry,
-            additionalNodeRecorders: configuration._additionalNodeRecorders
+            additionalNodeRecorders: configuration._additionalNodeRecorders,
+            featureFlags: configuration.featureFlags
         )
-        let scheduler = MainThreadScheduler(interval: 0.1)
-        let messageReceiver = RUMContextReceiver()
 
-        self.messageReceiver = messageReceiver
+        let scheduler = MainThreadScheduler(interval: 0.1)
+        let contextReceiver = RUMContextReceiver()
+
+        self.messageReceiver = CombinedFeatureMessageReceiver([
+            contextReceiver,
+            WebViewRecordReceiver(
+                scope: core.scope(for: SessionReplayFeature.self)
+            )
+        ])
+
+        self.textAndInputPrivacyLevel = configuration.textAndInputPrivacyLevel
+        self.imagePrivacyLevel = configuration.imagePrivacyLevel
+        self.touchPrivacyLevel = configuration.touchPrivacyLevel
+
         self.recordingCoordinator = RecordingCoordinator(
             scheduler: scheduler,
-            privacy: configuration.defaultPrivacyLevel,
-            rumContextObserver: messageReceiver,
+            textAndInputPrivacy: configuration.textAndInputPrivacyLevel,
+            imagePrivacy: configuration.imagePrivacyLevel,
+            touchPrivacy: configuration.touchPrivacyLevel,
+            rumContextObserver: contextReceiver,
             srContextPublisher: SRContextPublisher(core: core),
             recorder: recorder,
-            sampler: Sampler(samplingRate: configuration.debugSDK ? 100 : configuration.replaySampleRate)
+            sampler: Sampler(samplingRate: configuration.debugSDK ? 100 : configuration.replaySampleRate),
+            telemetry: telemetry,
+            startRecordingImmediately: configuration.startRecordingImmediately
         )
         self.requestBuilder = SegmentRequestBuilder(
             customUploadURL: configuration.customEndpoint,
@@ -69,6 +95,14 @@ internal class SessionReplayFeature: DatadogRemoteFeature {
                 changeRate: 0.75 // vs 0.1 with `uploadFrequency: .frequent`
             )
         )
+    }
+
+    func startRecording() {
+        self.recordingCoordinator.startRecording()
+    }
+
+    func stopRecording() {
+        self.recordingCoordinator.stopRecording()
     }
 }
 #endif

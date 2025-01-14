@@ -9,45 +9,46 @@ import UIKit
 import WebKit
 
 internal class WKWebViewRecorder: NodeRecorder {
-    let identifier = UUID()
+    internal let identifier: UUID
+
+    init(identifier: UUID) {
+        self.identifier = identifier
+    }
 
     func semantics(of view: UIView, with attributes: ViewAttributes, in context: ViewTreeRecordingContext) -> NodeSemantics? {
         guard let webView = view as? WKWebView else {
             return nil
         }
 
-        guard attributes.isVisible else {
-            return InvisibleElement.constant
-        }
+        // Add the webview to cache
+        context.webViewCache.add(webView)
 
-        let builder = WKWebViewWireframesBuilder(
-            wireframeID: context.ids.nodeID(view: view, nodeRecorder: self),
-            slotID: webView.configuration.userContentController.hash,
-            attributes: attributes
-        )
-
+        let builder = WKWebViewWireframesBuilder(slotID: webView.hash, attributes: attributes)
         let node = Node(viewAttributes: attributes, wireframesBuilder: builder)
         return SpecificElement(subtreeStrategy: .ignore, nodes: [node])
     }
 }
 
 internal struct WKWebViewWireframesBuilder: NodeWireframesBuilder {
-    let wireframeID: WireframeID
-    /// The slot identifier of the webview controller.
+    /// The webview slot ID.
     let slotID: Int
-    /// Attributes of the `UIView`.
+
     let attributes: ViewAttributes
 
-    var wireframeRect: CGRect {
-        attributes.frame
-    }
+    var wireframeRect: CGRect { attributes.frame }
 
     func buildWireframes(with builder: WireframesBuilder) -> [SRWireframe] {
+        guard attributes.isVisible else {
+            // ignore hidden webview, the wireframes will be built
+            // for hidden slot
+            return []
+        }
+
         return [
-            builder.createWebViewWireframe(
-                id: wireframeID,
-                frame: wireframeRect,
-                slotId: String(slotID),
+            builder.visibleWebViewWireframe(
+                id: slotID,
+                frame: attributes.frame,
+                clip: attributes.clip,
                 borderColor: attributes.layerBorderColor,
                 borderWidth: attributes.layerBorderWidth,
                 backgroundColor: attributes.backgroundColor,
@@ -57,4 +58,5 @@ internal struct WKWebViewWireframesBuilder: NodeWireframesBuilder {
         ]
     }
 }
+
 #endif

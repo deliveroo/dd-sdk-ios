@@ -16,13 +16,30 @@ public class DDW3CHTTPHeadersWriter: NSObject {
     }
 
     @objc
-    @available(*, deprecated, message: "This will be removed in future versions of the SDK. Use `init(sampleRate:)` instead.")
+    @available(*, deprecated, message: "This will be removed in future versions of the SDK. Use `init(samplingStrategy: .custom(sampleRate:))` instead.")
     public convenience init(samplingRate: Float) {
         self.init(sampleRate: samplingRate)
     }
 
     @objc
+    @available(*, deprecated, message: "This will be removed in future versions of the SDK. Use `init(samplingStrategy: .custom(sampleRate:))` instead.")
     public init(sampleRate: Float = 20) {
-        swiftW3CHTTPHeadersWriter = W3CHTTPHeadersWriter(sampleRate: sampleRate, tracestate: [:])
+        swiftW3CHTTPHeadersWriter = W3CHTTPHeadersWriter(
+            samplingStrategy: .custom(sampleRate: sampleRate),
+            tracestate: [:],
+            traceContextInjection: .all
+        )
+    }
+
+    @objc
+    public init(
+        samplingStrategy: DDTraceSamplingStrategy,
+        traceContextInjection: DDTraceContextInjection
+    ) {
+        swiftW3CHTTPHeadersWriter = W3CHTTPHeadersWriter(
+            samplingStrategy: samplingStrategy.swiftType,
+            tracestate: [:],
+            traceContextInjection: traceContextInjection.swiftType
+        )
     }
 }

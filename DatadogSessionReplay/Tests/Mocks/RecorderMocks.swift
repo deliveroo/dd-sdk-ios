@@ -4,22 +4,16 @@
  * Copyright 2019-Present Datadog, Inc.
  */
 
+#if os(iOS)
 import Foundation
-import UIKit
 import XCTest
+import UIKit
+import WebKit
+
+import DatadogInternal
 @_spi(Internal)
 @testable import DatadogSessionReplay
 @testable import TestUtilities
-
-extension PrivacyLevel: AnyMockable, RandomMockable {
-    public static func mockAny() -> PrivacyLevel {
-        return .allow
-    }
-
-    public static func mockRandom() -> PrivacyLevel {
-        return [.allow, .mask, .maskUserInput].randomElement()!
-    }
-}
 
 // MARK: - ViewTreeSnapshot Mocks
 
@@ -34,7 +28,7 @@ extension ViewTreeSnapshot: AnyMockable, RandomMockable {
             context: .mockRandom(),
             viewportSize: .mockRandom(),
             nodes: .mockRandom(count: .random(in: (5..<50))),
-            resources: .mockRandom(count: .random(in: (5..<50)))
+            webViewSlotIDs: .mockRandom()
         )
     }
 
@@ -43,14 +37,14 @@ extension ViewTreeSnapshot: AnyMockable, RandomMockable {
         context: Recorder.Context = .mockAny(),
         viewportSize: CGSize = .mockAny(),
         nodes: [Node] = .mockAny(),
-        resources: [Resource] = .mockAny()
+        webViewSlotIDs: Set<Int> = .mockAny()
     ) -> ViewTreeSnapshot {
         return ViewTreeSnapshot(
             date: date,
             context: context,
             viewportSize: viewportSize,
             nodes: nodes,
-            resources: resources
+            webViewSlotIDs: webViewSlotIDs
         )
     }
 }
@@ -63,38 +57,45 @@ extension ViewAttributes: AnyMockable, RandomMockable {
 
     /// Random mock, not guaranteeing consistency of returned `ViewAttributes`.
     public static func mockRandom() -> ViewAttributes {
+        let frame: CGRect = .mockRandom()
         return .init(
-            frame: .mockRandom(),
+            frame: frame,
+            clip: frame,
             backgroundColor: UIColor.mockRandom().cgColor,
             layerBorderColor: UIColor.mockRandom().cgColor,
             layerBorderWidth: .mockRandom(min: 0, max: 5),
             layerCornerRadius: .mockRandom(min: 0, max: 5),
             alpha: .mockRandom(min: 0, max: 1),
             isHidden: .mockRandom(),
-            intrinsicContentSize: .mockRandom()
+            intrinsicContentSize: .mockRandom(),
+            overrides: .mockAny()
         )
     }
 
     /// Partial mock, not guaranteeing consistency of returned `ViewAttributes`.
     static func mockWith(
         frame: CGRect = .mockAny(),
+        clip: CGRect = .mockAny(),
         backgroundColor: CGColor? = .mockAny(),
         layerBorderColor: CGColor? = .mockAny(),
         layerBorderWidth: CGFloat = .mockAny(),
         layerCornerRadius: CGFloat = .mockAny(),
         alpha: CGFloat = .mockAny(),
         isHidden: Bool = .mockAny(),
-        intrinsicContentSize: CGSize = .mockAny()
+        intrinsicContentSize: CGSize = .mockAny(),
+        overrides: PrivacyOverrides = .mockAny()
     ) -> ViewAttributes {
         return .init(
             frame: frame,
+            clip: clip,
             backgroundColor: backgroundColor,
             layerBorderColor: layerBorderColor,
             layerBorderWidth: layerBorderWidth,
             layerCornerRadius: layerCornerRadius,
             alpha: alpha,
             isHidden: isHidden,
-            intrinsicContentSize: intrinsicContentSize
+            intrinsicContentSize: intrinsicContentSize,
+            overrides: overrides
         )
     }
 
@@ -123,12 +124,12 @@ extension ViewAttributes: AnyMockable, RandomMockable {
 
     /// Partial mock, guaranteeing consistency of returned `ViewAttributes`.
     static func mock(fixture: Fixture) -> ViewAttributes {
-        var frame: CGRect?
+        var frame: CGRect
         var backgroundColor: CGColor?
         var layerBorderColor: CGColor?
         var layerBorderWidth: CGFloat?
-        var alpha: CGFloat?
-        var isHidden: Bool?
+        var alpha: CGFloat
+        var isHidden: Bool
 
         // swiftlint:disable opening_brace
         switch fixture {
@@ -140,7 +141,7 @@ extension ViewAttributes: AnyMockable, RandomMockable {
             // visible:
             isHidden = false
             alpha = .mockRandom(min: 0.1, max: 1)
-            frame = .mockRandom(minWidth: 10, minHeight: 10)
+            frame = .mockRandom(maxX: 5, maxY: 5, minWidth: 10, minHeight: 10)
             // no appearance:
             oneOrMoreOf([
                 { layerBorderWidth = 0 },
@@ -150,7 +151,7 @@ extension ViewAttributes: AnyMockable, RandomMockable {
             // visibile:
             isHidden = false
             alpha = .mockRandom(min: 0.1, max: 1)
-            frame = .mockRandom(minWidth: 10, minHeight: 10)
+            frame = .mockRandom(maxX: 5, maxY: 5, minWidth: 10, minHeight: 10)
             // some appearance:
             oneOrMoreOf([
                 {
@@ -163,7 +164,7 @@ extension ViewAttributes: AnyMockable, RandomMockable {
             // opaque:
             isHidden = false
             alpha = 1
-            frame = .mockRandom(minWidth: 10, minHeight: 10)
+            frame = .mockRandom(maxX: 5, maxY: 5, minWidth: 10, minHeight: 10)
             backgroundColor = UIColor.mockRandomWith(alpha: 1).cgColor
             layerBorderWidth = .mockRandom(min: 1, max: 5)
             layerBorderColor = UIColor.mockRandomWith(alpha: .mockRandom(min: 0.1, max: 1)).cgColor
@@ -171,14 +172,16 @@ extension ViewAttributes: AnyMockable, RandomMockable {
         // swiftlint:enable opening_brace
 
         let mock = ViewAttributes(
-            frame: frame ?? .mockRandom(minWidth: 10, minHeight: 10),
+            frame: frame,
+            clip: frame,
             backgroundColor: backgroundColor,
             layerBorderColor: layerBorderColor,
             layerBorderWidth: layerBorderWidth ?? .mockRandom(min: 1, max: 4),
             layerCornerRadius: .mockRandom(min: 0, max: 4),
-            alpha: alpha ?? .mockRandom(min: 0.01, max: 1),
-            isHidden: isHidden ?? .mockRandom(),
-            intrinsicContentSize: (frame ?? .mockRandom(minWidth: 10, minHeight: 10)).size
+            alpha: alpha,
+            isHidden: isHidden,
+            intrinsicContentSize: frame.size,
+            overrides: .mockAny()
         )
 
         // consistency check:
@@ -225,8 +228,7 @@ func mockRandomNodeSemantics() -> NodeSemantics {
         UnknownElement.constant,
         InvisibleElement.constant,
         AmbiguousElement(
-            nodes: .mockRandom(count: .mockRandom(min: 1, max: 5)),
-            resources: .mockRandom(count: .mockRandom(min: 1, max: 5))
+            nodes: .mockRandom(count: .mockRandom(min: 1, max: 5))
         ),
         SpecificElement(subtreeStrategy: .mockRandom(), nodes: .mockRandom(count: .mockRandom(min: 1, max: 5))),
     ]
@@ -237,7 +239,7 @@ struct ShapeWireframesBuilderMock: NodeWireframesBuilder {
     let wireframeRect: CGRect
 
     func buildWireframes(with builder: WireframesBuilder) -> [SRWireframe] {
-        return [builder.createShapeWireframe(id: .mockAny(), frame: wireframeRect)]
+        return [builder.createShapeWireframe(id: .mockAny(), frame: wireframeRect, clip: wireframeRect)]
     }
 }
 
@@ -297,7 +299,7 @@ extension UIImageResource: RandomMockable {
     }
 }
 
-extension Collection where Element == Resource {
+extension Array where Element == Resource {
     static func mockAny() -> [Resource] {
         return [MockResource].mockAny()
     }
@@ -341,22 +343,29 @@ extension ViewTreeRecordingContext: AnyMockable, RandomMockable {
     }
 
     public static func mockRandom() -> ViewTreeRecordingContext {
+        let view = UIView.mockRandom()
         return .init(
             recorder: .mockRandom(),
-            coordinateSpace: UIView.mockRandom(),
-            ids: NodeIDGenerator()
+            coordinateSpace: view,
+            ids: NodeIDGenerator(),
+            webViewCache: .weakObjects(),
+            clip: view.bounds
         )
     }
 
     static func mockWith(
         recorder: Recorder.Context = .mockAny(),
         coordinateSpace: UICoordinateSpace = UIView.mockAny(),
-        ids: NodeIDGenerator = NodeIDGenerator()
+        ids: NodeIDGenerator = NodeIDGenerator(),
+        webViewCache: NSHashTable<WKWebView> = .weakObjects(),
+        clip: CGRect? = nil
     ) -> ViewTreeRecordingContext {
         return .init(
             recorder: recorder,
             coordinateSpace: coordinateSpace,
-            ids: ids
+            ids: ids,
+            webViewCache: webViewCache,
+            clip: clip ?? coordinateSpace.bounds
         )
     }
 }
@@ -364,6 +373,8 @@ extension ViewTreeRecordingContext: AnyMockable, RandomMockable {
 class NodeRecorderMock: NodeRecorder {
     var identifier = UUID()
     var queriedViews: Set<UIView> = []
+    var queryAttributes: [ViewAttributes] = []
+    var queryAttributesByView: [UIView: ViewAttributes] = [:]
     var queryContexts: [ViewTreeRecordingContext] = []
     var queryContextsByView: [UIView: ViewTreeRecordingContext] = [:]
     var resultForView: ((UIView) -> NodeSemantics?)?
@@ -374,6 +385,8 @@ class NodeRecorderMock: NodeRecorder {
 
     func semantics(of view: UIView, with attributes: ViewAttributes, in context: ViewTreeRecordingContext) -> NodeSemantics? {
         queriedViews.insert(view)
+        queryAttributes.append(attributes)
+        queryAttributesByView[view] = attributes
         queryContexts.append(context)
         queryContextsByView[view] = context
         return resultForView?(view)
@@ -434,7 +447,8 @@ extension TouchSnapshot.Touch: AnyMockable, RandomMockable {
             id: .mockRandom(),
             phase: [.down, .move, .up].randomElement()!,
             date: .mockRandom(),
-            position: .mockRandom()
+            position: .mockRandom(),
+            touchOverride: nil
         )
     }
 
@@ -448,41 +462,13 @@ extension TouchSnapshot.Touch: AnyMockable, RandomMockable {
             id: id,
             phase: phase,
             date: date,
-            position: position
+            position: position,
+            touchOverride: nil
         )
     }
 }
 
 // MARK: - Recorder Mocks
-
-extension RUMContext: AnyMockable, RandomMockable {
-    public static func mockAny() -> RUMContext {
-        return .mockWith()
-    }
-
-    public static func mockRandom() -> RUMContext {
-        return RUMContext(
-            applicationID: .mockRandom(),
-            sessionID: .mockRandom(),
-            viewID: .mockRandom(),
-            viewServerTimeOffset: .mockRandom()
-        )
-    }
-
-    static func mockWith(
-        applicationID: String = .mockAny(),
-        sessionID: String = .mockAny(),
-        viewID: String? = .mockAny(),
-        serverTimeOffset: TimeInterval = .mockAny()
-    ) -> RUMContext {
-        return RUMContext(
-            applicationID: applicationID,
-            sessionID: sessionID,
-            viewID: viewID,
-            viewServerTimeOffset: serverTimeOffset
-        )
-    }
-}
 
 extension Recorder.Context: AnyMockable, RandomMockable {
     public static func mockAny() -> Recorder.Context {
@@ -491,7 +477,9 @@ extension Recorder.Context: AnyMockable, RandomMockable {
 
     public static func mockRandom() -> Recorder.Context {
         return Recorder.Context(
-            privacy: .mockRandom(),
+            textAndInputPrivacy: .mockRandom(),
+            imagePrivacy: .mockRandom(),
+            touchPrivacy: .mockRandom(),
             rumContext: .mockRandom(),
             date: .mockRandom()
         )
@@ -499,28 +487,38 @@ extension Recorder.Context: AnyMockable, RandomMockable {
 
     static func mockWith(
         date: Date = .mockAny(),
-        privacy: PrivacyLevel = .mockAny(),
+        textAndInputPrivacy: TextAndInputPrivacyLevel = .mockAny(),
+        imagePrivacy: ImagePrivacyLevel = .mockAny(),
+        touchPrivacy: TouchPrivacyLevel = .mockAny(),
         rumContext: RUMContext = .mockAny()
     ) -> Recorder.Context {
         return Recorder.Context(
-            privacy: privacy,
+            textAndInputPrivacy: textAndInputPrivacy,
+            imagePrivacy: imagePrivacy,
+            touchPrivacy: touchPrivacy,
             rumContext: rumContext,
             date: date
         )
     }
 
     init(
-        privacy: PrivacyLevel,
+        textAndInputPrivacy: TextAndInputPrivacyLevel,
+        imagePrivacy: ImagePrivacyLevel,
+        touchPrivacy: TouchPrivacyLevel,
         rumContext: RUMContext,
-        date: Date = Date()
+        date: Date = Date(),
+        telemetry: Telemetry = NOPTelemetry()
     ) {
         self.init(
-            privacy: privacy,
+            textAndInputPrivacy: textAndInputPrivacy,
+            imagePrivacy: imagePrivacy,
+            touchPrivacy: touchPrivacy,
             applicationID: rumContext.applicationID,
             sessionID: rumContext.sessionID,
             viewID: rumContext.viewID ?? "",
             viewServerTimeOffset: rumContext.viewServerTimeOffset,
-            date: date
+            date: date,
+            telemetry: telemetry
         )
     }
 }
@@ -551,7 +549,7 @@ internal func mockUIView<View: UIView>(with attributes: ViewAttributes) -> View 
     // Consistency check - to make sure computed properties in `ViewAttributes` captured
     // for mocked view are equal the these from requested `attributes`.
     let expectedAttributes = attributes
-    let actualAttributes = ViewAttributes(frameInRootView: view.frame, view: view)
+    let actualAttributes = ViewAttributes(view: view, frame: view.frame, clip: view.frame, overrides: .mockAny())
 
     assert(
         actualAttributes.isVisible == expectedAttributes.isVisible,
@@ -601,3 +599,33 @@ internal extension Optional where Wrapped == NodeSemantics {
         return try XCTUnwrap(builders.first, file: file, line: line)
     }
 }
+
+extension PrivacyOverrides: AnyMockable, RandomMockable {
+    public static func mockAny() -> PrivacyOverrides {
+        return mockWith()
+    }
+
+    public static func mockRandom() -> PrivacyOverrides {
+        return mockWith(
+            textAndInputPrivacy: .mockRandom(),
+            imagePrivacy: .mockRandom(),
+            touchPrivacy: .mockRandom(),
+            hide: .mockRandom()
+        )
+    }
+
+    public static func mockWith(
+        textAndInputPrivacy: TextAndInputPrivacyLevel? = nil,
+        imagePrivacy: ImagePrivacyLevel? = nil,
+        touchPrivacy: TouchPrivacyLevel? = nil,
+        hide: Bool? = nil
+    ) -> PrivacyOverrides {
+        let override = PrivacyOverrides(UIView.mockRandom())
+        override.textAndInputPrivacy = textAndInputPrivacy
+        override.imagePrivacy = imagePrivacy
+        override.touchPrivacy = touchPrivacy
+        override.hide = hide
+        return override
+    }
+}
+#endif

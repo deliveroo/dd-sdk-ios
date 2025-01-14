@@ -23,8 +23,11 @@ class RUMInstrumentationTests: XCTestCase {
             mainQueue: .main,
             dateProvider: SystemDateProvider(),
             backtraceReporter: BacktraceReporterMock(),
-            fatalErrorContext: .mockAny(),
-            processID: .mockAny()
+            fatalErrorContext: FatalErrorContextNotifierMock(),
+            processID: .mockAny(),
+            notificationCenter: .default,
+            watchdogTermination: .mockRandom(),
+            memoryWarningMonitor: .mockRandom()
         )
 
         // Then
@@ -48,8 +51,11 @@ class RUMInstrumentationTests: XCTestCase {
             mainQueue: .main,
             dateProvider: SystemDateProvider(),
             backtraceReporter: BacktraceReporterMock(),
-            fatalErrorContext: .mockAny(),
-            processID: .mockAny()
+            fatalErrorContext: FatalErrorContextNotifierMock(),
+            processID: .mockAny(),
+            notificationCenter: .default,
+            watchdogTermination: .mockRandom(),
+            memoryWarningMonitor: .mockRandom()
         )
 
         // Then
@@ -70,8 +76,11 @@ class RUMInstrumentationTests: XCTestCase {
             mainQueue: .main,
             dateProvider: SystemDateProvider(),
             backtraceReporter: BacktraceReporterMock(),
-            fatalErrorContext: .mockAny(),
-            processID: .mockAny()
+            fatalErrorContext: FatalErrorContextNotifierMock(),
+            processID: .mockAny(),
+            notificationCenter: .default,
+            watchdogTermination: .mockRandom(),
+            memoryWarningMonitor: .mockRandom()
         )
 
         // Then
@@ -95,8 +104,11 @@ class RUMInstrumentationTests: XCTestCase {
             mainQueue: .main,
             dateProvider: SystemDateProvider(),
             backtraceReporter: BacktraceReporterMock(),
-            fatalErrorContext: .mockAny(),
-            processID: .mockAny()
+            fatalErrorContext: FatalErrorContextNotifierMock(),
+            processID: .mockAny(),
+            notificationCenter: .default,
+            watchdogTermination: .mockRandom(),
+            memoryWarningMonitor: .mockRandom()
         )
 
         // Then
@@ -116,8 +128,11 @@ class RUMInstrumentationTests: XCTestCase {
             mainQueue: .main,
             dateProvider: SystemDateProvider(),
             backtraceReporter: BacktraceReporterMock(),
-            fatalErrorContext: .mockAny(),
-            processID: .mockAny()
+            fatalErrorContext: FatalErrorContextNotifierMock(),
+            processID: .mockAny(),
+            notificationCenter: .default,
+            watchdogTermination: .mockRandom(),
+            memoryWarningMonitor: .mockRandom()
         )
 
         // Then
@@ -137,8 +152,11 @@ class RUMInstrumentationTests: XCTestCase {
             mainQueue: .main,
             dateProvider: SystemDateProvider(),
             backtraceReporter: BacktraceReporterMock(),
-            fatalErrorContext: .mockAny(),
-            processID: .mockAny()
+            fatalErrorContext: FatalErrorContextNotifierMock(),
+            processID: .mockAny(),
+            notificationCenter: .default,
+            watchdogTermination: .mockRandom(),
+            memoryWarningMonitor: .mockRandom()
         )
 
         // Then
@@ -158,8 +176,11 @@ class RUMInstrumentationTests: XCTestCase {
             mainQueue: .main,
             dateProvider: SystemDateProvider(),
             backtraceReporter: BacktraceReporterMock(),
-            fatalErrorContext: .mockAny(),
-            processID: .mockAny()
+            fatalErrorContext: FatalErrorContextNotifierMock(),
+            processID: .mockAny(),
+            notificationCenter: .default,
+            watchdogTermination: .mockRandom(),
+            memoryWarningMonitor: .mockRandom()
         )
         let subscriber = RUMCommandSubscriberMock()
 
@@ -169,14 +190,14 @@ class RUMInstrumentationTests: XCTestCase {
         // Then
         withExtendedLifetime(instrumentation) {
             XCTAssertIdentical(instrumentation.viewsHandler.subscriber, subscriber)
-            XCTAssertIdentical((instrumentation.actionsHandler as? UIKitRUMUserActionsHandler)?.subscriber, subscriber)
+            XCTAssertIdentical((instrumentation.actionsHandler as? RUMActionsHandler)?.subscriber, subscriber)
             XCTAssertIdentical(instrumentation.longTasks?.subscriber, subscriber)
             XCTAssertIdentical(instrumentation.appHangs?.nonFatalHangsHandler.subscriber, subscriber)
         }
     }
 }
 
-internal func DDAssertActiveSwizzlings(_ expectedSwizzledSelectors: [String], file: StaticString = #filePath, line: UInt = #line) {
+internal func DDAssertActiveSwizzlings(_ expectedSwizzledSelectors: [String], file: StaticString = #fileID, line: UInt = #line) {
     _DDEvaluateAssertion(message: "Only \(expectedSwizzledSelectors) swizzlings should be active", file: file, line: line) {
         let actual = Swizzling.methods.map { "\(method_getName($0))" }.sorted()
         let expected = expectedSwizzledSelectors.sorted()

@@ -5,6 +5,7 @@
  */
 
 import DatadogInternal
+import Foundation
 
 /// Core mock that only allows registering and retrieving features.
 ///
@@ -36,17 +37,17 @@ public class FeatureRegistrationCoreMock: DatadogCoreProtocol {
 
     // MARK: - Supported
 
-    public func register<T>(feature: T) throws where T : DatadogFeature {
+    public func register<T>(feature: T) throws where T: DatadogFeature {
         registeredFeatures.append(feature)
     }
 
-    public func get<T>(feature type: T.Type) -> T? where T : DatadogFeature {
+    public func feature<T>(named name: String, type: T.Type) -> T? {
         return registeredFeatures.firstElement(of: type)
     }
 
     // MARK: - Unsupported
 
-    public func scope<T>(for featureType: T.Type) -> FeatureScope where T : DatadogFeature {
+    public func scope<T>(for featureType: T.Type) -> FeatureScope where T: DatadogFeature {
         return NOPFeatureScope()
     }
 
@@ -56,5 +57,9 @@ public class FeatureRegistrationCoreMock: DatadogCoreProtocol {
 
     public func send(message: DatadogInternal.FeatureMessage, else fallback: @escaping () -> Void) {
         // not supported - use different type of core mock if you need this
+    }
+
+    public func mostRecentModifiedFileAt(before: Date) throws -> Date? {
+        return nil
     }
 }

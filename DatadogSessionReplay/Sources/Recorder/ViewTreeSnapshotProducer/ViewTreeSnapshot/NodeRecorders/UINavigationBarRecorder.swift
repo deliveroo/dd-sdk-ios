@@ -8,18 +8,26 @@
 import UIKit
 
 internal struct UINavigationBarRecorder: NodeRecorder {
-    let identifier = UUID()
+    internal let identifier: UUID
+
+    init(identifier: UUID) {
+        self.identifier = identifier
+    }
 
     func semantics(of view: UIView, with attributes: ViewAttributes, in context: ViewTreeRecordingContext) -> NodeSemantics? {
         guard let navigationBar = view as? UINavigationBar else {
             return nil
         }
 
+        guard attributes.isVisible else {
+            return InvisibleElement.constant
+        }
+
         let builder = UINavigationBarWireframesBuilder(
             wireframeRect: inferOccupiedFrame(of: navigationBar, in: context),
             wireframeID: context.ids.nodeID(view: navigationBar, nodeRecorder: self),
             attributes: attributes,
-            color: inferColor(of: navigationBar)
+            color: inferBackgroundColor(of: navigationBar)
         )
 
         let node = Node(viewAttributes: attributes, wireframesBuilder: builder)
@@ -27,7 +35,6 @@ internal struct UINavigationBarRecorder: NodeRecorder {
     }
 
     private func inferOccupiedFrame(of navigationBar: UINavigationBar, in context: ViewTreeRecordingContext) -> CGRect {
-        // TODO: RUMM-2791 Enhance appearance of `UITabBar` and `UINavigationBar` in SR
         var occupiedFrame = navigationBar.frame
         for subview in navigationBar.subviews {
             let subviewFrame = subview.convert(subview.bounds, to: context.coordinateSpace)
@@ -36,8 +43,13 @@ internal struct UINavigationBarRecorder: NodeRecorder {
         return occupiedFrame
     }
 
-    private func inferColor(of navigationBar: UINavigationBar) -> CGColor {
-        // TODO: RUMM-2791 Enhance appearance of `UITabBar` and `UINavigationBar` in SR
+    private func inferBackgroundColor(of navigationBar: UINavigationBar) -> CGColor {
+        if let color = navigationBar.backgroundColor {
+            return color.cgColor
+        } else if !navigationBar.isTranslucent {
+            return UIColor.black.cgColor
+        }
+
         if #available(iOS 13.0, *) {
             switch UITraitCollection.current.userInterfaceStyle {
             case .light:
@@ -66,7 +78,8 @@ internal struct UINavigationBarWireframesBuilder: NodeWireframesBuilder {
             builder.createShapeWireframe(
                 id: wireframeID,
                 frame: wireframeRect,
-                borderColor: UIColor.gray.cgColor,
+                clip: attributes.clip,
+                borderColor: UIColor.lightGray.withAlphaComponent(0.5).cgColor,
                 borderWidth: 1,
                 backgroundColor: color,
                 cornerRadius: attributes.layerCornerRadius,

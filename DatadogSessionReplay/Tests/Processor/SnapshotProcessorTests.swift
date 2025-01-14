@@ -4,7 +4,9 @@
  * Copyright 2019-Present Datadog, Inc.
  */
 
+#if os(iOS)
 import XCTest
+import WebKit
 import DatadogInternal
 import TestUtilities
 
@@ -29,9 +31,11 @@ class SnapshotProcessorTests: XCTestCase {
         // Given
         let core = PassthroughCoreMock()
         let srContextPublisher = SRContextPublisher(core: core)
+        let resourceProcessor = ResourceProcessorSpy()
         let processor = SnapshotProcessor(
             queue: NoQueue(),
             recordWriter: recordWriter,
+            resourceProcessor: resourceProcessor,
             srContextPublisher: srContextPublisher,
             telemetry: TelemetryMock()
         )
@@ -43,6 +47,7 @@ class SnapshotProcessorTests: XCTestCase {
 
         // Then
         XCTAssertEqual(recordWriter.records.count, 1)
+        XCTAssertTrue(resourceProcessor.resources.isEmpty)
 
         let enrichedRecord = try XCTUnwrap(recordWriter.records.first)
         XCTAssertEqual(enrichedRecord.applicationID, rum.applicationID)
@@ -67,6 +72,7 @@ class SnapshotProcessorTests: XCTestCase {
         let processor = SnapshotProcessor(
             queue: NoQueue(),
             recordWriter: recordWriter,
+            resourceProcessor: ResourceProcessorSpy(),
             srContextPublisher: srContextPublisher,
             telemetry: TelemetryMock()
         )
@@ -112,7 +118,13 @@ class SnapshotProcessorTests: XCTestCase {
         // Given
         let core = PassthroughCoreMock()
         let srContextPublisher = SRContextPublisher(core: core)
-        let processor = SnapshotProcessor(queue: NoQueue(), recordWriter: recordWriter, srContextPublisher: srContextPublisher, telemetry: TelemetryMock())
+        let processor = SnapshotProcessor(
+            queue: NoQueue(),
+            recordWriter: recordWriter,
+            resourceProcessor: ResourceProcessorSpy(),
+            srContextPublisher: srContextPublisher,
+            telemetry: TelemetryMock()
+        )
         let view = UIView.mock(withFixture: .visible(.someAppearance))
         view.frame = CGRect(x: 0, y: 0, width: 100, height: 200)
         let rotatedView = UIView.mock(withFixture: .visible(.someAppearance))
@@ -134,8 +146,8 @@ class SnapshotProcessorTests: XCTestCase {
         XCTAssertTrue(enrichedRecords[0].records[1].isFocusRecord)
         XCTAssertTrue(enrichedRecords[0].records[2].isFullSnapshotRecord)
 
-        XCTAssertEqual(enrichedRecords[1].records.count, 2, "It should follow with 'full snapshot' → 'incremental snapshot' records")
-        XCTAssertTrue(enrichedRecords[1].records[0].isFullSnapshotRecord)
+        XCTAssertEqual(enrichedRecords[1].records.count, 2, "It should follow with 'incremental snapshot' records")
+        XCTAssertTrue(enrichedRecords[1].records[0].isIncrementalSnapshotRecord)
         XCTAssertTrue(enrichedRecords[1].records[1].isIncrementalSnapshotRecord)
         XCTAssertEqual(enrichedRecords[1].records[1].incrementalSnapshot?.viewportResizeData?.height, 100)
         XCTAssertEqual(enrichedRecords[1].records[1].incrementalSnapshot?.viewportResizeData?.width, 200)
@@ -151,7 +163,13 @@ class SnapshotProcessorTests: XCTestCase {
         // Given
         let core = PassthroughCoreMock()
         let srContextPublisher = SRContextPublisher(core: core)
-        let processor = SnapshotProcessor(queue: NoQueue(), recordWriter: recordWriter, srContextPublisher: srContextPublisher, telemetry: TelemetryMock())
+        let processor = SnapshotProcessor(
+            queue: NoQueue(),
+            recordWriter: recordWriter,
+            resourceProcessor: ResourceProcessorSpy(),
+            srContextPublisher: srContextPublisher,
+            telemetry: TelemetryMock()
+        )
         let viewTree = generateSimpleViewTree()
 
         // When
@@ -194,6 +212,133 @@ class SnapshotProcessorTests: XCTestCase {
         XCTAssertEqual(core.recordsCountByViewID?.values.map { $0 }, [4, 4])
     }
 
+    func testWhenProcessingViewTreeSnapshot_itIncludeWebViewSlotFromNode() throws {
+        let time = Date()
+        let rum: RUMContext = .mockWith(serverTimeOffset: 0)
+
+        // Given
+        let core = PassthroughCoreMock()
+        let srContextPublisher = SRContextPublisher(core: core)
+        let processor = SnapshotProcessor(
+            queue: NoQueue(),
+            recordWriter: recordWriter,
+            resourceProcessor: ResourceProcessorSpy(),
+            srContextPublisher: srContextPublisher,
+            telemetry: TelemetryMock()
+        )
+
+        let hiddenSlot: Int = .mockRandom()
+        let visibleSlot: Int = .mockRandom(otherThan: [hiddenSlot])
+        let builder = WKWebViewWireframesBuilder(slotID: visibleSlot, attributes: .mockAny())
+        let node = Node(viewAttributes: .mockAny(), wireframesBuilder: builder)
+
+        // When
+        let snapshot = ViewTreeSnapshot(
+            date: time,
+            context: .init(
+                textAndInputPrivacy: .mockRandom(),
+                imagePrivacy: .mockRandom(),
+                touchPrivacy: .mockRandom(),
+                rumContext: rum,
+                date: time
+            ),
+            viewportSize: .mockRandom(minWidth: 1_000, minHeight: 1_000),
+            nodes: [node],
+            webViewSlotIDs: Set([hiddenSlot, visibleSlot])
+        )
+
+        processor.process(viewTreeSnapshot: snapshot, touchSnapshot: nil)
+
+        // Then
+        XCTAssertEqual(recordWriter.records.count, 1)
+
+        let enrichedRecord = try XCTUnwrap(recordWriter.records.first)
+        XCTAssertEqual(enrichedRecord.applicationID, rum.applicationID)
+        XCTAssertEqual(enrichedRecord.sessionID, rum.sessionID)
+        XCTAssertEqual(enrichedRecord.viewID, rum.viewID)
+
+        XCTAssertEqual(enrichedRecord.records.count, 3)
+        XCTAssertTrue(enrichedRecord.records[2].isFullSnapshotRecord)
+        let fullSnapshotRecord = try XCTUnwrap(enrichedRecord.records[2].fullSnapshot)
+        XCTAssertEqual(fullSnapshotRecord.data.wireframes.count, 2)
+
+        XCTAssertEqual(fullSnapshotRecord.data.wireframes.first?.id, Int64(hiddenSlot), "The hidden webview wireframe should be first")
+        XCTAssertEqual(fullSnapshotRecord.data.wireframes.last?.id, Int64(visibleSlot), "The visible webview wireframe should be last")
+    }
+
+    func testWhenProcessingViewTreeSnapshot_itIncludeWebViewSlotFromCache() throws {
+        let time = Date()
+        let rum: RUMContext = .mockWith(serverTimeOffset: 0)
+
+        // Given
+        let core = PassthroughCoreMock()
+        let srContextPublisher = SRContextPublisher(core: core)
+        let processor = SnapshotProcessor(
+            queue: NoQueue(),
+            recordWriter: recordWriter,
+            resourceProcessor: ResourceProcessorSpy(),
+            srContextPublisher: srContextPublisher,
+            telemetry: TelemetryMock()
+        )
+
+        let webview = WKWebView()
+        let viewTree = generateSimpleViewTree()
+
+        // When
+        snapshotBuilder.webViewCache.add(webview)
+        let snapshot = generateViewTreeSnapshot(for: viewTree, date: time, rumContext: rum)
+        processor.process(viewTreeSnapshot: snapshot, touchSnapshot: nil)
+
+        // Then
+        XCTAssertEqual(recordWriter.records.count, 1)
+
+        let enrichedRecord = try XCTUnwrap(recordWriter.records.first)
+        XCTAssertEqual(enrichedRecord.applicationID, rum.applicationID)
+        XCTAssertEqual(enrichedRecord.sessionID, rum.sessionID)
+        XCTAssertEqual(enrichedRecord.viewID, rum.viewID)
+
+        XCTAssertEqual(enrichedRecord.records.count, 3)
+        XCTAssertTrue(enrichedRecord.records[2].isFullSnapshotRecord)
+        let fullSnapshotRecord = try XCTUnwrap(enrichedRecord.records[2].fullSnapshot)
+        XCTAssertEqual(fullSnapshotRecord.data.wireframes.count, 3)
+        XCTAssertEqual(fullSnapshotRecord.data.wireframes.first?.id, Int64(webview.hash), "The hidden webview wireframe should be first")
+    }
+
+    func testWhenProcessingViewTreeSnapshot_itRecordsResources() throws {
+        let resource: UIImageResource = .mockRandom()
+        let builder = UIImageViewWireframesBuilder(
+            wireframeID: .mockAny(),
+            imageWireframeID: .mockAny(),
+            attributes: .mockAny(),
+            contentFrame: .mockAny(),
+            imageResource: resource,
+            imagePrivacyLevel: .maskNonBundledOnly
+        )
+        let snapshot: ViewTreeSnapshot = .mockWith(
+            context: .mockRandom(),
+            nodes: [
+                Node(viewAttributes: .mockAny(), wireframesBuilder: builder)
+            ]
+        )
+        let resourceProcessor = ResourceProcessorSpy()
+        let core = PassthroughCoreMock()
+        let srContextPublisher = SRContextPublisher(core: core)
+        let processor = SnapshotProcessor(
+            queue: NoQueue(),
+            recordWriter: recordWriter,
+            resourceProcessor: resourceProcessor,
+            srContextPublisher: srContextPublisher,
+            telemetry: TelemetryMock()
+        )
+
+        processor.process(viewTreeSnapshot: snapshot, touchSnapshot: nil)
+
+        let processedResource = try XCTUnwrap(resourceProcessor.processedResources.first?.resources.first)
+        XCTAssertEqual(processedResource.calculateIdentifier(), resource.calculateIdentifier())
+        XCTAssertEqual(processedResource.calculateData(), resource.calculateData())
+        XCTAssertEqual(resourceProcessor.processedResources.first?.context, EnrichedResource.Context(snapshot.context.applicationID))
+    }
+
     // MARK: - Processing `TouchSnapshots`
 
     func testWhenProcessingTouchSnapshot_itWritesRecordsThatContinueCurrentSegment() throws {
@@ -205,7 +350,13 @@ class SnapshotProcessorTests: XCTestCase {
         // Given
         let core = PassthroughCoreMock()
         let srContextPublisher = SRContextPublisher(core: core)
-        let processor = SnapshotProcessor(queue: NoQueue(), recordWriter: recordWriter, srContextPublisher: srContextPublisher, telemetry: TelemetryMock())
+        let processor = SnapshotProcessor(
+            queue: NoQueue(),
+            recordWriter: recordWriter,
+            resourceProcessor: ResourceProcessorSpy(),
+            srContextPublisher: srContextPublisher,
+            telemetry: TelemetryMock()
+        )
 
         // When
         let touchSnapshot = generateTouchSnapshot(startAt: earliestTouchTime, endAt: snapshotTime, numberOfTouches: numberOfTouches)
@@ -248,7 +399,14 @@ class SnapshotProcessorTests: XCTestCase {
         // Given
         let core = PassthroughCoreMock()
         let srContextPublisher = SRContextPublisher(core: core)
-        let processor = SnapshotProcessor(queue: NoQueue(), recordWriter: recordWriter, srContextPublisher: srContextPublisher, telemetry: TelemetryMock())
+        let processor = SnapshotProcessor(
+            queue: NoQueue(),
+            recordWriter: recordWriter,
+            resourceProcessor: ResourceProcessorSpy(),
+            srContextPublisher: srContextPublisher,
+            telemetry: TelemetryMock()
+        )
+
         let viewTree = generateSimpleViewTree()
 
         // When
@@ -281,10 +439,19 @@ class SnapshotProcessorTests: XCTestCase {
 
     // MARK: - `ViewTreeSnapshot` generation
 
-    private let snapshotBuilder = ViewTreeSnapshotBuilder(additionalNodeRecorders: [])
+    private let snapshotBuilder = ViewTreeSnapshotBuilder(additionalNodeRecorders: [], featureFlags: .allEnabled)
 
     private func generateViewTreeSnapshot(for viewTree: UIView, date: Date, rumContext: RUMContext) -> ViewTreeSnapshot {
-        snapshotBuilder.createSnapshot(of: viewTree, with: .init(privacy: .allow, rumContext: rumContext, date: date))
+        snapshotBuilder.createSnapshot(
+            of: viewTree,
+            with: .init(
+                textAndInputPrivacy: .mockRandom(),
+                imagePrivacy: .mockRandom(),
+                touchPrivacy: .mockRandom(),
+                rumContext: rumContext,
+                date: date
+            )
+        )
     }
 
     private func generateSimpleViewTree() -> UIView {
@@ -334,7 +501,8 @@ class SnapshotProcessorTests: XCTestCase {
                         id: .mockRandom(min: 0, max: TouchIdentifier(numberOfTouches)),
                         phase: [.down, .move, .up].randomElement()!,
                         date: startTime.addingTimeInterval(Double(index) * (dt / Double(numberOfTouches))),
-                        position: .mockRandom()
+                        position: .mockRandom(),
+                        touchOverride: nil
                     )
             }
         )
@@ -346,3 +514,4 @@ fileprivate extension PassthroughCoreMock {
         return try? context.baggages["sr_records_count_by_view_id"]?.decode()
     }
 }
+#endif

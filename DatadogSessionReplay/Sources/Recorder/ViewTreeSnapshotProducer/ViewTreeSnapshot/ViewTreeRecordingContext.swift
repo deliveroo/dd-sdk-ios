@@ -8,6 +8,8 @@
 import Foundation
 import SafariServices
 import SwiftUI
+import WebKit
+import DatadogInternal
 
 /// The context of recording subtree hierarchy.
 ///
@@ -22,6 +24,10 @@ public struct SessionReplayViewTreeRecordingContext {
     public let ids: NodeIDGenerator
     /// Variable view controller related context
     var viewControllerContext: ViewControllerContext = .init()
+    /// Webviews caching.
+    let webViewCache: NSHashTable<WKWebView>
+    /// The clipping rect to apply to wireframes.
+    var clip: CGRect
 }
 
 // This alias enables us to have a more unique name exposed through public-internal access level
@@ -42,16 +48,20 @@ internal extension ViewTreeRecordingContext {
             ///
             /// - Parameter viewController: The `UIViewController` for which to determine the `ViewControllerType`.
             internal init(_ viewController: UIViewController?) {
-                switch viewController {
-                case is UIAlertController:
+                guard let viewController else {
+                    self = .other
+                    return
+                }
+
+                if viewController is UIAlertController {
                     self = .alert
-                case is UIActivityViewController:
+                } else if viewController is UIActivityViewController {
                     self = .activity
-                case is SFSafariViewController:
+                } else if viewController is SFSafariViewController {
                     self = .safari
-                case is AnyUIHostingViewController:
+                } else if Bundle(for: type(of: viewController)).isSwiftUI {
                     self = .swiftUI
-                default:
+                } else {
                     self = .other
                 }
             }
@@ -94,8 +104,4 @@ internal extension ViewTreeRecordingContext {
         }
     }
 }
-
-private protocol AnyUIHostingViewController: AnyObject {}
-@available(iOS 13.0, *)
-extension UIHostingController: AnyUIHostingViewController {}
 #endif

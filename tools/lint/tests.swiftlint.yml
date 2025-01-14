@@ -83,25 +83,27 @@ custom_rules:
     severity: error
 
 included:
-  - ../../Tests
-  - ../../TestUtilities/Sources
+  - ../../TestUtilities
   - ../../DatadogInternal/Tests
   - ../../DatadogCore/Tests
   - ../../DatadogLogs/Tests
   - ../../DatadogTrace/Tests
   - ../../DatadogRUM/Tests
   - ../../DatadogSessionReplay/Tests
+  - ../../DatadogSessionReplay/SRSnapshotTests
   - ../../DatadogCrashReporting/Tests
   - ../../DatadogWebViewTracking/Tests
-  - ../../Datadog/E2ETests
-  - ../../Datadog/E2EInstrumentationTests
-  - ../../instrumented-tests/http-server-mock/Tests
+  - ../../Datadog/IntegrationUnitTests
+  - ../../E2ETests
+  - ../../BenchmarkTests/Runner
+  - ../../BenchmarkTests/Benchmarks
+  - ../../tools/http-server-mock/Tests
   - ../../tools/api-surface/Tests
   - ../../tools/rum-models-generator/Tests
   - ../../tools/sr-snapshots/Tests
-  - ../../dependency-manager-tests/carthage/CTProjectTests
-  - ../../dependency-manager-tests/carthage/CTProjectUITests
-  - ../../dependency-manager-tests/cocoapods/CTProjectTests
-  - ../../dependency-manager-tests/cocoapods/CTProjectUITests
-  - ../../dependency-manager-tests/spm/SPMProjectTests
-  - ../../dependency-manager-tests/spm/SPMProjectUITests
+  - ../../SmokeTests/carthage/CTProjectTests
+  - ../../SmokeTests/carthage/CTProjectUITests
+  - ../../SmokeTests/cocoapods/CTProjectTests
+  - ../../SmokeTests/cocoapods/CTProjectUITests
+  - ../../SmokeTests/spm/SPMProjectTests
+  - ../../SmokeTests/spm/SPMProjectUITests

@@ -5,59 +5,19 @@
  */
 
 import XCTest
+#if os(iOS)
 import WebKit
 import SwiftUI
 import SafariServices
 @_spi(Internal)
 @testable import DatadogSessionReplay
+@testable import DatadogInternal
 
 @available(iOS 13.0, *)
 class UnsupportedViewRecorderTests: XCTestCase {
-    private let recorder = UnsupportedViewRecorder()
-
-    private let unsupportedViews: [UIView] = [
-        UIProgressView(), UIActivityIndicatorView(), WKWebView()
-    ].compactMap { $0 }
-    private let expectedUnsupportedViewsClassNames = [
-        "UIProgressView", "UIActivityIndicatorView", "WKWebView"
-    ]
-    private let otherViews = [UILabel(), UIView(), UIImageView(), UIScrollView()]
-
-    /// `ViewAttributes` simulating common attributes of the view.
-    private var viewAttributes: ViewAttributes = .mockAny()
-
-    func testWhenViewIsNotVisible() throws {
-        // When
-        viewAttributes = .mock(fixture: .invisible)
-
-        // Then
-        try unsupportedViews.forEach { view in
-            let semantics = try XCTUnwrap(recorder.semantics(of: view, with: viewAttributes, in: .mockAny()))
-            XCTAssertTrue(semantics is InvisibleElement)
-        }
-        otherViews.forEach { view in
-            XCTAssertNil(recorder.semantics(of: view, with: viewAttributes, in: .mockAny()))
-        }
-    }
-
-    func testWhenViewIsVisible() throws {
-        // When
-        viewAttributes = .mock(fixture: .visible([.noAppearance, .someAppearance].randomElement()!))
-
-        // Then
-        try unsupportedViews.enumerated().forEach { index, view in
-            let semantics = try XCTUnwrap(recorder.semantics(of: view, with: viewAttributes, in: .mockAny()))
-            XCTAssertTrue(semantics is SpecificElement)
-            XCTAssertEqual(semantics.subtreeStrategy, .ignore)
-            let wireframeBuilder = try XCTUnwrap(semantics.nodes.first?.wireframesBuilder as? UnsupportedViewWireframesBuilder)
-            XCTAssertEqual(wireframeBuilder.unsupportedClassName, expectedUnsupportedViewsClassNames[index])
-        }
-        otherViews.forEach { view in
-            XCTAssertNil(recorder.semantics(of: view, with: viewAttributes, in: .mockAny()))
-        }
-    }
-
     func testWhenViewIsUnsupportedViewControllersRootView() throws {
+        let recorder = UnsupportedViewRecorder(identifier: UUID(), featureFlags: .defaults)
+
         var context = ViewTreeRecordingContext.mockRandom()
         context.viewControllerContext.isRootView = true
         context.viewControllerContext.parentType = [.safari, .activity, .swiftUI].randomElement()
@@ -68,4 +28,33 @@ class UnsupportedViewRecorderTests: XCTestCase {
         let wireframeBuilder = try XCTUnwrap(semantics.nodes.first?.wireframesBuilder as? UnsupportedViewWireframesBuilder)
         XCTAssertNotNil(wireframeBuilder.unsupportedClassName)
     }
+
+    func testWhenSwiftUIFeatureFlagIsDisabled() throws {
+        let recorder = UnsupportedViewRecorder(identifier: UUID(), featureFlags: [.swiftui: false])
+
+        var context = ViewTreeRecordingContext.mockRandom()
+        context.viewControllerContext.isRootView = true
+        context.viewControllerContext.parentType = .swiftUI
+
+        let semantics = try XCTUnwrap(recorder.semantics(of: UIView(), with: .mock(fixture: .visible(.someAppearance)), in: context))
+        XCTAssertTrue(semantics is SpecificElement)
+        XCTAssertEqual(semantics.subtreeStrategy, .ignore)
+        let builder = try XCTUnwrap(semantics.nodes.first?.wireframesBuilder as? UnsupportedViewWireframesBuilder)
+        let wireframes = builder.buildWireframes(with: WireframesBuilder())
+        XCTAssertEqual(wireframes.count, 1)
+        let wireframe = try XCTUnwrap(wireframes.last?.placeholderWireframe)
+        XCTAssertEqual(wireframe.label, "SwiftUI")
+    }
+
+    func testWhenSwiftUIFeatureFlagIsEnabled() throws {
+        let recorder = UnsupportedViewRecorder(identifier: UUID(), featureFlags: [.swiftui: true])
+
+        var context = ViewTreeRecordingContext.mockRandom()
+        context.viewControllerContext.isRootView = true
+        context.viewControllerContext.parentType = .swiftUI
+
+        let semantics = recorder.semantics(of: UIView(), with: .mock(fixture: .visible(.someAppearance)), in: context)
+        XCTAssertNil(semantics)
+    }
 }
+#endif

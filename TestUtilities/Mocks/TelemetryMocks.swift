@@ -73,25 +73,51 @@ public class TelemetryMock: Telemetry, CustomStringConvertible {
             let attributesString = attributes.map({ ", \($0)" }) ?? ""
             description.append("\n- [debug] \(message)" + attributesString)
         case .error(_, let message, let kind, let stack):
-            description.append("\n - [error] \(message), kind: \(kind ?? "nil"), stack: \(stack ?? "nil")")
+            description.append("\n - [error] \(message), kind: \(kind), stack: \(stack)")
         case .configuration(let configuration):
             description.append("\n- [configuration] \(configuration)")
-        case let .metric(name, attributes):
-            let attributesString = attributes.map({ "\($0.key): \($0.value)" }).joined(separator: ", ")
-            description.append("\n- [metric] '\(name)' (" + attributesString + ")")
+        case let .metric(metric):
+            let attributesString = metric.attributes.map({ "\($0.key): \($0.value)" }).joined(separator: ", ")
+            description.append("\n- [metric] '\(metric.name)' (" + attributesString + ")")
+        case .usage(let usage):
+            description.append("\n- [usage] \(usage)")
         }
+
+        expectation?.fulfill()
     }
 }
 
 public extension Array where Element == TelemetryMessage {
     /// Returns properties of the first metric message of given name.
-    func firstMetric(named metricName: String) -> (name: String, attributes: [String: Encodable])? {
-        return compactMap({ $0.asMetric }).filter({ $0.name == metricName }).first
+    func firstMetric(named metricName: String) -> MetricTelemetry? {
+        return compactMap({ $0.asMetric })
+            .first(where: { $0.name == metricName })
     }
 
-    /// Returns attributes of the first ERROR telemetry in this array.
+    /// Returns properties of the first metric message of given name.
+    func lastMetric(named metricName: String) -> MetricTelemetry? {
+        return compactMap({ $0.asMetric })
+            .last(where: { $0.name == metricName })
+    }
+
+    /// Returns attributes of the first debug telemetry in this array.
+    func firstDebug() -> (id: String, message: String, attributes: [String: Encodable]?)? {
+        return compactMap { $0.asDebug }.first
+    }
+
+    /// Returns attributes of the first error telemetry in this array.
     func firstError() -> (id: String, message: String, kind: String?, stack: String?)? {
         return compactMap { $0.asError }.first
+    }
+
+    /// Returns the first configuration telemetry in this array.
+    func firstConfiguration() -> ConfigurationTelemetry? {
+        return compactMap { $0.asConfiguration }.first
+    }
+
+    /// Returns the first usage telemetry in this array.
+    func firstUsage() -> UsageTelemetry? {
+        return compactMap { $0.asUsage }.first
     }
 }
 
@@ -121,11 +147,18 @@ public extension TelemetryMessage {
     }
 
     /// Extracts metric attributes if this is metric message.
-    var asMetric: (name: String, attributes: [String: Encodable])? {
-        guard case let .metric(name, attributes) = self else {
+    var asMetric: MetricTelemetry? {
+        guard case let .metric(metric) = self else {
             return nil
         }
-        return (name: name, attributes: attributes)
+        return metric
+    }
+
+    var asUsage: UsageTelemetry? {
+        guard case let .usage(usage) = self else {
+            return nil
+        }
+        return usage
     }
 }
 

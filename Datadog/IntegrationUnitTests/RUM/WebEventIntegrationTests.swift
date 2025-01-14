@@ -6,17 +6,16 @@
 
 import XCTest
 #if !os(tvOS)
-import WebKit
 
+import DatadogInternal
 import TestUtilities
+
 @testable import DatadogRUM
 @testable import DatadogWebViewTracking
 
 class WebEventIntegrationTests: XCTestCase {
-    // swiftlint:disable implicitly_unwrapped_optional
     private var core: DatadogCoreProxy! // swiftlint:disable:this implicitly_unwrapped_optional
-    private var controller: WKUserContentControllerMock!
-    // swiftlint:enable implicitly_unwrapped_optional
+    private var controller: WKUserContentControllerMock! // swiftlint:disable:this implicitly_unwrapped_optional
 
     override func setUp() {
         core = DatadogCoreProxy(
@@ -28,10 +27,14 @@ class WebEventIntegrationTests: XCTestCase {
         )
 
         controller = WKUserContentControllerMock()
-        let configuration = WKWebViewConfiguration()
-        configuration.userContentController = controller
-        let webView = WKWebView(frame: .zero, configuration: configuration)
-        WebViewTracking.enable(webView: webView, in: core)
+
+        WebViewTracking.enable(
+            tracking: controller,
+            hosts: [],
+            hostsSanitizer: HostsSanitizer(),
+            logsSampleRate: 100,
+            in: core
+        )
     }
 
     override func tearDown() {
@@ -56,11 +59,12 @@ class WebEventIntegrationTests: XCTestCase {
             "application": {
               "id": "xxx"
             },
-            "date": \(1635932927012),
+            "date": \(1_635_932_927_012),
             "service": "super",
             "session": {
               "id": "0110cab4-7471-480e-aa4e-7ce039ced355",
-              "type": "user"
+              "type": "user",
+              "has_replay": true
             },
             "type": "view",
             "view": {
@@ -90,14 +94,16 @@ class WebEventIntegrationTests: XCTestCase {
                 "count": 3
               },
               "time_spent": 3120000000,
-              "url": "http://localhost:8080/test.html"
+              "url": "http://localhost:8080/test.html",
             },
             "_dd": {
               "document_version": 2,
               "drift": 0,
               "format_version": 2,
-              "session": {
-                "plan": 2
+              "replay_stats": {
+                  "records_count": 10,
+                  "segments_count": 1,
+                  "segments_total_raw_size": 10
               }
             }
           },
@@ -115,7 +121,8 @@ class WebEventIntegrationTests: XCTestCase {
         // Then
         let expectedUUID = randomUUID.uuidString.lowercased()
         let rumMatcher = try XCTUnwrap(core.waitAndReturnRUMEventMatchers().last)
-        try rumMatcher.assertItFullyMatches(jsonString: """
+        try rumMatcher.assertItFullyMatches(
+            jsonString: """
         {
             "application": {
               "id": "\(randomApplicationID)"
@@ -159,10 +166,7 @@ class WebEventIntegrationTests: XCTestCase {
             "_dd": {
               "document_version": 2,
               "drift": 0,
-              "format_version": 2,
-              "session": {
-                "plan": 1
-              }
+              "format_version": 2
             }
         }
         """
@@ -230,7 +234,8 @@ class WebEventIntegrationTests: XCTestCase {
         // Then
         let expectedUUID = randomUUID.uuidString.lowercased()
         let rumMatcher = try XCTUnwrap(core.waitAndReturnRUMEventMatchers().last)
-        try rumMatcher.assertItFullyMatches(jsonString: """
+        try rumMatcher.assertItFullyMatches(
+            jsonString: """
         {
           "type": "telemetry",
           "date": \(1_712_069_357_432 + 123.toInt64Milliseconds),

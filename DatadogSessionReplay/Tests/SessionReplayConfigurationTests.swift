@@ -4,6 +4,7 @@
  * Copyright 2019-Present Datadog, Inc.
  */
 
+#if os(iOS)
 import XCTest
 @_spi(Internal)
 @testable import DatadogSessionReplay
@@ -11,14 +12,35 @@ import XCTest
 
 class SessionReplayConfigurationTests: XCTestCase {
     func testDefaultConfiguration() {
-        let random: Float = .mockRandom(min: 0, max: 100)
-
         // When
-        let config = SessionReplay.Configuration(replaySampleRate: random)
+        let config = SessionReplay.Configuration()
 
         // Then
-        XCTAssertEqual(config.replaySampleRate, random)
+        XCTAssertEqual(config.replaySampleRate, 100)
         XCTAssertEqual(config.defaultPrivacyLevel, .mask)
+        XCTAssertEqual(config.textAndInputPrivacyLevel, .maskAll)
+        XCTAssertEqual(config.imagePrivacyLevel, .maskAll)
+        XCTAssertEqual(config.touchPrivacyLevel, .hide)
+        XCTAssertEqual(config.startRecordingImmediately, true)
+        XCTAssertNil(config.customEndpoint)
+        XCTAssertEqual(config._additionalNodeRecorders.count, 0)
+    }
+
+    func testDefaultConfigurationWithNewApi() {
+        // When
+        let config = SessionReplay.Configuration(
+            textAndInputPrivacyLevel: .maskAll,
+            imagePrivacyLevel: .maskAll,
+            touchPrivacyLevel: .hide
+        )
+
+        // Then
+        XCTAssertEqual(config.replaySampleRate, 100)
+        XCTAssertEqual(config.defaultPrivacyLevel, .mask)
+        XCTAssertEqual(config.textAndInputPrivacyLevel, .maskAll)
+        XCTAssertEqual(config.imagePrivacyLevel, .maskAll)
+        XCTAssertEqual(config.touchPrivacyLevel, .hide)
+        XCTAssertEqual(config.startRecordingImmediately, true)
         XCTAssertNil(config.customEndpoint)
         XCTAssertEqual(config._additionalNodeRecorders.count, 0)
     }
@@ -35,4 +57,21 @@ class SessionReplayConfigurationTests: XCTestCase {
         XCTAssertEqual(config._additionalNodeRecorders.count, 1)
         XCTAssertEqual(config._additionalNodeRecorders[0].identifier, mockNodeRecorder.identifier)
     }
+
+    func testConfigurationWithAdditionalNodeRecordersWithNewApi() {
+        let mockNodeRecorder = SessionReplayNodeRecorderMock()
+
+        // When
+        var config = SessionReplay.Configuration(
+            textAndInputPrivacyLevel: .maskAll,
+            imagePrivacyLevel: .maskAll,
+            touchPrivacyLevel: .hide
+        )
+        config.setAdditionalNodeRecorders([mockNodeRecorder])
+
+        // Then
+        XCTAssertEqual(config._additionalNodeRecorders.count, 1)
+        XCTAssertEqual(config._additionalNodeRecorders[0].identifier, mockNodeRecorder.identifier)
+    }
 }
+#endif

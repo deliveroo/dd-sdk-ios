@@ -4,6 +4,7 @@
  * Copyright 2019-Present Datadog, Inc.
  */
 
+#if os(iOS)
 import XCTest
 @_spi(Internal)
 @testable import DatadogSessionReplay
@@ -24,11 +25,19 @@ class ViewTreeSnapshotBuilderTests: XCTestCase {
         let snapshot = builder.createSnapshot(of: view, with: randomRecorderContext)
 
         // Then
-        XCTAssertEqual(snapshot.context, randomRecorderContext)
+        XCTAssertEqual(snapshot.context.applicationID, randomRecorderContext.applicationID)
+        XCTAssertEqual(snapshot.context.sessionID, randomRecorderContext.sessionID)
+        XCTAssertEqual(snapshot.context.viewID, randomRecorderContext.viewID)
+        XCTAssertEqual(snapshot.context.viewServerTimeOffset, randomRecorderContext.viewServerTimeOffset)
+        XCTAssertEqual(snapshot.context.date, randomRecorderContext.date)
 
         let queryContext = try XCTUnwrap(nodeRecorder.queryContexts.first)
         XCTAssertTrue(queryContext.coordinateSpace === view)
-        XCTAssertEqual(queryContext.recorder, randomRecorderContext)
+        XCTAssertEqual(queryContext.recorder.applicationID, randomRecorderContext.applicationID)
+        XCTAssertEqual(queryContext.recorder.sessionID, randomRecorderContext.sessionID)
+        XCTAssertEqual(queryContext.recorder.viewID, randomRecorderContext.viewID)
+        XCTAssertEqual(queryContext.recorder.viewServerTimeOffset, randomRecorderContext.viewServerTimeOffset)
+        XCTAssertEqual(queryContext.recorder.date, randomRecorderContext.date)
     }
 
     func testItAppliesServerTimeOffsetToSnapshot() {
@@ -53,16 +62,25 @@ class ViewTreeSnapshotBuilderTests: XCTestCase {
         let view = UIView(frame: .mockRandom())
         let randomRecorderContext: Recorder.Context = .mockRandom()
         let additionalNodeRecorder = SessionReplayNodeRecorderMock(resultForView: { _ in nil })
-        let builder = ViewTreeSnapshotBuilder(additionalNodeRecorders: [additionalNodeRecorder])
+        let builder = ViewTreeSnapshotBuilder(additionalNodeRecorders: [additionalNodeRecorder], featureFlags: .allEnabled)
 
         // When
         let snapshot = builder.createSnapshot(of: view, with: randomRecorderContext)
 
         // Then
-        XCTAssertEqual(snapshot.context, randomRecorderContext)
+        XCTAssertEqual(snapshot.context.applicationID, randomRecorderContext.applicationID)
+        XCTAssertEqual(snapshot.context.sessionID, randomRecorderContext.sessionID)
+        XCTAssertEqual(snapshot.context.viewID, randomRecorderContext.viewID)
+        XCTAssertEqual(snapshot.context.viewServerTimeOffset, randomRecorderContext.viewServerTimeOffset)
+        XCTAssertEqual(snapshot.context.date, randomRecorderContext.date)
 
         let queryContext = try XCTUnwrap(additionalNodeRecorder.queryContexts.first)
         XCTAssertTrue(queryContext.coordinateSpace === view)
-        XCTAssertEqual(queryContext.recorder, randomRecorderContext)
+        XCTAssertEqual(queryContext.recorder.applicationID, randomRecorderContext.applicationID)
+        XCTAssertEqual(queryContext.recorder.sessionID, randomRecorderContext.sessionID)
+        XCTAssertEqual(queryContext.recorder.viewID, randomRecorderContext.viewID)
+        XCTAssertEqual(queryContext.recorder.viewServerTimeOffset, randomRecorderContext.viewServerTimeOffset)
+        XCTAssertEqual(queryContext.recorder.date, randomRecorderContext.date)
     }
 }
+#endif

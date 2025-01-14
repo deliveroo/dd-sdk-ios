@@ -27,6 +27,33 @@ public extension RUMMonitorProtocol {
 public struct DatadogInternalInterface {
     let monitor: RUMCommandSubscriber
 
+    /// Adds a RUM error to the current view, allowing the addition of BinaryImages
+    /// which can be used to symbolicate stack traces that are not provided by PLCrashReporter
+    internal func addError(
+        at time: Date,
+        message: String,
+        type: String?,
+        stack: String?,
+        source: RUMInternalErrorSource,
+        globalAttributes: [AttributeKey: AttributeValue],
+        attributes: [AttributeKey: AttributeValue],
+        binaryImages: [BinaryImage]?
+    ) {
+        let addErrorCommand = RUMAddCurrentViewErrorCommand(
+            time: time,
+            message: message,
+            type: type,
+            stack: stack,
+            source: source,
+            isCrash: false,
+            threads: nil,
+            binaryImages: binaryImages,
+            isStackTraceTruncated: nil,
+            attributes: attributes
+        )
+        monitor.process(command: addErrorCommand)
+    }
+
     /// Adds RUM long task to current view.
     /// - Parameters:
     ///   - time: the time of this command in cross-platform SDK
@@ -37,7 +64,11 @@ public struct DatadogInternalInterface {
         duration: TimeInterval,
         attributes: [AttributeKey: AttributeValue] = [:]
     ) {
-        let longTaskCommand = RUMAddLongTaskCommand(time: time, attributes: attributes, duration: duration)
+        let longTaskCommand = RUMAddLongTaskCommand(
+            time: time,
+            attributes: attributes,
+            duration: duration
+        )
         monitor.process(command: longTaskCommand)
     }
 

@@ -11,14 +11,16 @@ internal class RUMResourceScope: RUMScope {
     // MARK: - Initialization
 
     let context: RUMContext
-    private let dependencies: RUMScopeDependencies
+
+    /// Container bundling dependencies for this scope.
+    let dependencies: RUMScopeDependencies
 
     /// This Resource's UUID.
     let resourceUUID: RUMUUID
     /// The name used to identify this Resource.
     private let resourceKey: String
     /// Resource attributes.
-    private var attributes: [AttributeKey: AttributeValue]
+    private var attributes: [AttributeKey: AttributeValue] = [:]
 
     /// The Resource url.
     private var resourceURL: String
@@ -58,7 +60,6 @@ internal class RUMResourceScope: RUMScope {
         context: RUMContext,
         dependencies: RUMScopeDependencies,
         resourceKey: String,
-        attributes: [AttributeKey: AttributeValue],
         startTime: Date,
         serverTimeOffset: TimeInterval,
         url: String,
@@ -72,7 +73,6 @@ internal class RUMResourceScope: RUMScope {
         self.dependencies = dependencies
         self.resourceUUID = dependencies.rumUUIDGenerator.generateUnique()
         self.resourceKey = resourceKey
-        self.attributes = attributes
         self.resourceURL = url
         self.resourceLoadingStartTime = startTime
         self.serverTimeOffset = serverTimeOffset
@@ -87,6 +87,10 @@ internal class RUMResourceScope: RUMScope {
     // MARK: - RUMScope
 
     func process(command: RUMCommand, context: DatadogContext, writer: Writer) -> Bool {
+        self.attributes = self.attributes
+            .merging(command.globalAttributes, uniquingKeysWith: { $1 })
+            .merging(command.attributes, uniquingKeysWith: { $1 })
+
         switch command {
         case let command as RUMStopResourceCommand where command.resourceKey == resourceKey:
             sendResourceEvent(on: command, context: context, writer: writer)
@@ -95,58 +99,47 @@ internal class RUMResourceScope: RUMScope {
             sendErrorEvent(on: command, context: context, writer: writer)
             return false
         case let command as RUMAddResourceMetricsCommand where command.resourceKey == resourceKey:
-            addMetrics(from: command)
+            resourceMetrics = command.metrics
         default:
             break
         }
         return true
     }
 
-    private func addMetrics(from command: RUMAddResourceMetricsCommand) {
-        attributes.merge(rumCommandAttributes: command.attributes)
-        resourceMetrics = command.metrics
-    }
-
     // MARK: - Sending RUM Events
 
     private func sendResourceEvent(on command: RUMStopResourceCommand, context: DatadogContext, writer: Writer) {
-        attributes.merge(rumCommandAttributes: command.attributes)
-
         let resourceStartTime: Date
         let resourceDuration: TimeInterval
         let size: Int64?
 
         // Check trace attributes
-        var traceId: TraceID? = nil
-        if let tid = attributes.removeValue(forKey: CrossPlatformAttributes.traceID) as? String {
-            traceId = .init(tid, representation: .hexadecimal)
-        } else {
-            traceId = spanContext?.traceID
-        }
+        let traceId: TraceID? = attributes.removeValue(forKey: CrossPlatformAttributes.traceID)?
+            .dd.decode()
+            .map { .init($0, representation: .hexadecimal) }
+            ?? spanContext?.traceID
 
-        var spanId: SpanID? = nil
-        if let sid = attributes.removeValue(forKey: CrossPlatformAttributes.spanID) as? String {
-            spanId = .init(sid, representation: .decimal)
-        } else {
-            spanId = spanContext?.spanID
-        }
+        let spanId: SpanID? = attributes.removeValue(forKey: CrossPlatformAttributes.spanID)?
+            .dd.decode()
+            .map { .init($0, representation: .decimal) }
+            ?? spanContext?.spanID
 
-        let traceSamplingRate = (attributes.removeValue(forKey: CrossPlatformAttributes.rulePSR) as? Double) ?? spanContext?.samplingRate
+        let traceSamplingRate = attributes.removeValue(forKey: CrossPlatformAttributes.rulePSR)?.dd.decode() ?? spanContext?.samplingRate
 
         // Check GraphQL attributes
         var graphql: RUMResourceEvent.Resource.Graphql? = nil
-        let graphqlOperationName = (attributes.removeValue(forKey: CrossPlatformAttributes.graphqlOperationName) as? String)
-        let graphqlPayload = (attributes.removeValue(forKey: CrossPlatformAttributes.graphqlPayload) as? String)
-        let graphqlVariables = (attributes.removeValue(forKey: CrossPlatformAttributes.graphqlVariables) as? String)
-        if let rawGraphqlOperationType = (attributes.removeValue(forKey: CrossPlatformAttributes.graphqlOperationType) as? String) {
-            if let graphqlOperationType = RUMResourceEvent.Resource.Graphql.OperationType(rawValue: rawGraphqlOperationType) {
-                graphql = .init(
-                    operationName: graphqlOperationName,
-                    operationType: graphqlOperationType,
-                    payload: graphqlPayload,
-                    variables: graphqlVariables
-                )
-            }
+        let graphqlOperationName: String? = attributes.removeValue(forKey: CrossPlatformAttributes.graphqlOperationName)?.dd.decode()
+        let graphqlPayload: String? = attributes.removeValue(forKey: CrossPlatformAttributes.graphqlPayload)?.dd.decode()
+        let graphqlVariables: String? = attributes.removeValue(forKey: CrossPlatformAttributes.graphqlVariables)?.dd.decode()
+        if
+            let rawGraphqlOperationType: String = attributes.removeValue(forKey: CrossPlatformAttributes.graphqlOperationType)?.dd.decode(),
+            let graphqlOperationType = RUMResourceEvent.Resource.Graphql.OperationType(rawValue: rawGraphqlOperationType) {
+            graphql = .init(
+                operationName: graphqlOperationName,
+                operationType: graphqlOperationType,
+                payload: graphqlPayload,
+                variables: graphqlVariables
+            )
         }
 
         /// Metrics values take precedence over other values.
@@ -190,7 +183,7 @@ internal class RUMResourceScope: RUMScope {
             date: resourceStartTime.addingTimeInterval(serverTimeOffset).timeIntervalSince1970.toInt64Milliseconds,
             device: .init(context: context, telemetry: dependencies.telemetry),
             display: nil,
-            os: .init(context: context),
+            os: .init(device: context.device),
             resource: .init(
                 connect: resourceMetrics?.connect.map { metric in
                     .init(
@@ -198,6 +191,8 @@ internal class RUMResourceScope: RUMScope {
                         start: metric.start.timeIntervalSince(resourceStartTime).toInt64Nanoseconds
                     )
                 },
+                decodedBodySize: nil,
+                deliveryType: nil,
                 dns: resourceMetrics?.dns.map { metric in
                     .init(
                         duration: metric.duration.toInt64Nanoseconds,
@@ -211,6 +206,7 @@ internal class RUMResourceScope: RUMScope {
                     )
                 },
                 duration: resolveResourceDuration(resourceDuration),
+                encodedBodySize: nil,
                 firstByte: resourceMetrics?.firstByte.map { metric in
                     .init(
                         duration: metric.duration.toInt64Nanoseconds,
@@ -220,6 +216,7 @@ internal class RUMResourceScope: RUMScope {
                 graphql: graphql,
                 id: resourceUUID.toRUMDataFormat,
                 method: resourceHTTPMethod,
+                protocol: nil,
                 provider: resourceEventProvider,
                 redirect: resourceMetrics?.redirection.map { metric in
                     .init(
@@ -227,6 +224,7 @@ internal class RUMResourceScope: RUMScope {
                         start: metric.start.timeIntervalSince(resourceStartTime).toInt64Nanoseconds
                     )
                 },
+                renderBlockingStatus: nil,
                 size: size ?? 0,
                 ssl: resourceMetrics?.ssl.map { metric in
                     .init(
@@ -235,8 +233,10 @@ internal class RUMResourceScope: RUMScope {
                     )
                 },
                 statusCode: command.httpStatusCode?.toInt64 ?? 0,
+                transferSize: nil,
                 type: resourceType,
-                url: resourceURL
+                url: resourceURL,
+                worker: nil
             ),
             service: context.service,
             session: .init(
@@ -263,9 +263,10 @@ internal class RUMResourceScope: RUMScope {
     }
 
     private func sendErrorEvent(on command: RUMStopResourceWithErrorCommand, context: DatadogContext, writer: Writer) {
-        attributes.merge(rumCommandAttributes: command.attributes)
-
-        let errorFingerprint = attributes.removeValue(forKey: RUM.Attributes.errorFingerprint) as? String
+        let errorFingerprint: String? = attributes.removeValue(forKey: RUM.Attributes.errorFingerprint)?.dd.decode()
+        let timeSinceAppStart = context.launchTime.map {
+            command.time.timeIntervalSince($0.launchDate).toInt64Milliseconds
+        }
 
         let errorEvent = RUMErrorEvent(
             dd: .init(
@@ -292,6 +293,7 @@ internal class RUMResourceScope: RUMScope {
             error: .init(
                 binaryImages: nil,
                 category: .exception, // resource errors are categorised as "Exception"
+                csp: nil,
                 fingerprint: errorFingerprint,
                 handling: nil,
                 handlingStack: nil,
@@ -309,11 +311,12 @@ internal class RUMResourceScope: RUMScope {
                 sourceType: command.errorSourceType,
                 stack: command.stack,
                 threads: nil,
+                timeSinceAppStart: timeSinceAppStart,
                 type: command.errorType,
                 wasTruncated: nil
             ),
             freeze: nil,
-            os: .init(context: context),
+            os: .init(device: context.device),
             service: context.service,
             session: .init(
                 hasReplay: context.hasReplay,

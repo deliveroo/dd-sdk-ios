@@ -8,10 +8,18 @@
 import UIKit
 
 internal struct UIDatePickerRecorder: NodeRecorder {
-    let identifier = UUID()
-    private let wheelsStyleRecorder = WheelsStyleDatePickerRecorder()
-    private let compactStyleRecorder = CompactStyleDatePickerRecorder()
-    private let inlineStyleRecorder = InlineStyleDatePickerRecorder()
+    internal let identifier: UUID
+
+    private let wheelsStyleRecorder: WheelsStyleDatePickerRecorder
+    private let compactStyleRecorder: CompactStyleDatePickerRecorder
+    private let inlineStyleRecorder: InlineStyleDatePickerRecorder
+
+    init(identifier: UUID) {
+        self.identifier = identifier
+        self.wheelsStyleRecorder = WheelsStyleDatePickerRecorder(identifier: UUID())
+        self.compactStyleRecorder = CompactStyleDatePickerRecorder(identifier: UUID())
+        self.inlineStyleRecorder = InlineStyleDatePickerRecorder(identifier: UUID())
+    }
 
     func semantics(of view: UIView, with attributes: ViewAttributes, in context: ViewTreeRecordingContext) -> NodeSemantics? {
         guard let datePicker = view as? UIDatePicker else {
@@ -22,25 +30,25 @@ internal struct UIDatePickerRecorder: NodeRecorder {
             return InvisibleElement.constant
         }
 
-        var recordingResult: RecordingResult?
+        var nodes: [Node]?
         if #available(iOS 13.4, *) {
             switch datePicker.datePickerStyle {
             case .wheels:
-                recordingResult = wheelsStyleRecorder.record(datePicker, with: attributes, in: context)
+                nodes = wheelsStyleRecorder.record(datePicker, with: attributes, in: context)
             case .compact:
-                recordingResult = compactStyleRecorder.record(datePicker, with: attributes, in: context)
+                nodes = compactStyleRecorder.record(datePicker, with: attributes, in: context)
             case .inline:
-                recordingResult = inlineStyleRecorder.record(datePicker, with: attributes, in: context)
+                nodes = inlineStyleRecorder.record(datePicker, with: attributes, in: context)
             case .automatic:
                 // According to `datePicker.datePickerStyle` documentation:
                 // > "This property always returns a concrete style, never `UIDatePickerStyle.automatic`."
                 break
             @unknown default:
-                recordingResult = wheelsStyleRecorder.record(datePicker, with: attributes, in: context)
+                nodes = wheelsStyleRecorder.record(datePicker, with: attributes, in: context)
             }
         } else {
             // Observation: older OS versions use the "wheels" style
-            recordingResult = wheelsStyleRecorder.record(datePicker, with: attributes, in: context)
+            nodes = wheelsStyleRecorder.record(datePicker, with: attributes, in: context)
         }
 
         let isDisplayedInPopover: Bool = {
@@ -64,24 +72,28 @@ internal struct UIDatePickerRecorder: NodeRecorder {
         )
         return SpecificElement(
             subtreeStrategy: .ignore,
-            nodes: [backgroundNode] + (recordingResult?.nodes ?? []),
-            resources: recordingResult?.resources ?? []
+            nodes: [backgroundNode] + (nodes ?? [])
         )
     }
 }
 
 private struct WheelsStyleDatePickerRecorder {
-    let pickerTreeRecorder = ViewTreeRecorder(
-        nodeRecorders: [
-            UIPickerViewRecorder(
-                textObfuscator: { context in
-                    return context.recorder.privacy.staticTextObfuscator
-                }
-            )
-        ]
-    )
+    private let pickerTreeRecorder: ViewTreeRecorder
 
-    func record(_ view: UIView, with attributes: ViewAttributes, in context: ViewTreeRecordingContext) -> RecordingResult {
+    init(identifier: UUID) {
+        self.pickerTreeRecorder = ViewTreeRecorder(
+            nodeRecorders: [
+                UIPickerViewRecorder(
+                    identifier: identifier,
+                    textObfuscator: { context, viewAttributes in
+                        return viewAttributes.resolveTextAndInputPrivacyLevel(in: context).staticTextObfuscator
+                    }
+                )
+            ]
+        )
+    }
+
+    func record(_ view: UIView, with attributes: ViewAttributes, in context: ViewTreeRecordingContext) -> [Node] {
         return pickerTreeRecorder.record(view, in: context)
     }
 }
@@ -91,26 +103,27 @@ private struct InlineStyleDatePickerRecorder {
     let labelRecorder: UILabelRecorder
     let subtreeRecorder: ViewTreeRecorder
 
-    init() {
-        self.viewRecorder = UIViewRecorder()
+    init(identifier: UUID) {
+        self.viewRecorder = UIViewRecorder(identifier: UUID())
         self.labelRecorder = UILabelRecorder(
-            textObfuscator: { context in
-                return context.recorder.privacy.staticTextObfuscator
+            identifier: UUID(),
+            textObfuscator: { context, viewAttributes in
+                return viewAttributes.resolveTextAndInputPrivacyLevel(in: context).staticTextObfuscator
             }
         )
         self.subtreeRecorder = ViewTreeRecorder(
             nodeRecorders: [
                 viewRecorder,
                 labelRecorder,
-                UIImageViewRecorder(),
-                UISegmentRecorder(), // iOS 14.x uses `UISegmentedControl` for "AM | PM"
+                UIImageViewRecorder(identifier: UUID()),
+                UISegmentRecorder(identifier: UUID()), // iOS 14.x uses `UISegmentedControl` for "AM | PM"
             ]
         )
     }
 
-    func record(_ view: UIView, with attributes: ViewAttributes, in context: ViewTreeRecordingContext) -> RecordingResult {
+    func record(_ view: UIView, with attributes: ViewAttributes, in context: ViewTreeRecordingContext) -> [Node] {
         viewRecorder.semanticsOverride = { _, viewAttributes in
-            if context.recorder.privacy.shouldMaskInputElements {
+            if context.recorder.textAndInputPrivacy.shouldMaskInputElements {
                 let isSquare = viewAttributes.frame.width == viewAttributes.frame.height
                 let isCircle = isSquare && viewAttributes.layerCornerRadius == viewAttributes.frame.width * 0.5
                 if isCircle {
@@ -120,7 +133,7 @@ private struct InlineStyleDatePickerRecorder {
             return nil
         }
 
-        if context.recorder.privacy.shouldMaskInputElements {
+        if context.recorder.textAndInputPrivacy.shouldMaskInputElements {
             labelRecorder.builderOverride = { builder in
                 var builder = builder
                 builder.textColor = SystemColors.label
@@ -133,18 +146,23 @@ private struct InlineStyleDatePickerRecorder {
 }
 
 private struct CompactStyleDatePickerRecorder {
-    let subtreeRecorder = ViewTreeRecorder(
-        nodeRecorders: [
-            UIViewRecorder(),
-            UILabelRecorder(
-                textObfuscator: { context in
-                    return context.recorder.privacy.staticTextObfuscator
-                }
-            )
-        ]
-    )
+    let subtreeRecorder: ViewTreeRecorder
 
-    func record(_ view: UIView, with attributes: ViewAttributes, in context: ViewTreeRecordingContext) -> RecordingResult {
+    init(identifier: UUID) {
+        self.subtreeRecorder = ViewTreeRecorder(
+            nodeRecorders: [
+                UIViewRecorder(identifier: UUID()),
+                UILabelRecorder(
+                    identifier: UUID(),
+                    textObfuscator: { context, viewAttributes in
+                        return viewAttributes.resolveTextAndInputPrivacyLevel(in: context).staticTextObfuscator
+                    }
+                )
+            ]
+        )
+    }
+
+    func record(_ view: UIView, with attributes: ViewAttributes, in context: ViewTreeRecordingContext) -> [Node] {
         return subtreeRecorder.record(view, in: context)
     }
 }
@@ -161,7 +179,7 @@ internal struct UIDatePickerWireframesBuilder: NodeWireframesBuilder {
             builder.createShapeWireframe(
                 id: backgroundWireframeID,
                 frame: wireframeRect,
-                clip: nil,
+                clip: attributes.clip,
                 borderColor: isDisplayedInPopover ? SystemColors.secondarySystemFill : nil,
                 borderWidth: isDisplayedInPopover ? 1 : 0,
                 backgroundColor: isDisplayedInPopover ? SystemColors.secondarySystemGroupedBackground : SystemColors.systemBackground,

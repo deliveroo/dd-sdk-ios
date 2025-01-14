@@ -98,13 +98,13 @@ class ServerDateProviderMock: ServerDateProvider {
 // MARK: - PerformancePreset Mocks
 
 struct StoragePerformanceMock: StoragePerformancePreset {
-    var maxFileSize: UInt64
-    var maxDirectorySize: UInt64
+    var maxFileSize: UInt32
+    var maxDirectorySize: UInt32
     var maxFileAgeForWrite: TimeInterval
     var minFileAgeForRead: TimeInterval
     var maxFileAgeForRead: TimeInterval
     var maxObjectsInFile: Int
-    var maxObjectSize: UInt64
+    var maxObjectSize: UInt32
 
     static let noOp = StoragePerformanceMock(
         maxFileSize: 0,
@@ -185,16 +185,6 @@ extension UploadPerformanceMock {
         minUploadDelay = other.minUploadDelay
         maxUploadDelay = other.maxUploadDelay
         uploadDelayChangeRate = other.uploadDelayChangeRate
-    }
-}
-
-extension BundleType: AnyMockable, RandomMockable {
-    public static func mockAny() -> BundleType {
-        return .iOSApp
-    }
-
-    public static func mockRandom() -> BundleType {
-        return [.iOSApp, .iOSAppExtension].randomElement()!
     }
 }
 
@@ -280,6 +270,7 @@ internal class NOPFilesOrchestrator: FilesOrchestratorType {
     func delete(readableFile: ReadableFile, deletionReason: BatchDeletedMetric.RemovalReason) { }
 
     var ignoreFilesAgeWhenReading = false
+    var trackName: String = "nop"
 }
 
 extension DataFormat {
@@ -306,23 +297,36 @@ class NOPDataUploadWorker: DataUploadWorkerType {
 }
 
 internal class DataUploaderMock: DataUploaderType {
-    let uploadStatus: DataUploadStatus
+    let uploadStatuses: [DataUploadStatus]
 
     /// Notifies on each started upload.
-    var onUpload: (() throws -> Void)?
+    var onUpload: ((DataUploadStatus?) throws -> Void)?
 
     /// Tracks uploaded events.
     private(set) var uploadedEvents: [Event] = []
 
-    init(uploadStatus: DataUploadStatus, onUpload: (() -> Void)? = nil) {
-        self.uploadStatus = uploadStatus
+    convenience init(uploadStatus: DataUploadStatus, onUpload: ((DataUploadStatus?) -> Void)? = nil) {
+        self.init(uploadStatuses: [uploadStatus], onUpload: onUpload)
+    }
+
+    init(uploadStatuses: [DataUploadStatus], onUpload: ((DataUploadStatus?) -> Void)? = nil) {
+        self.uploadStatuses = uploadStatuses
         self.onUpload = onUpload
     }
 
-    func upload(events: [Event], context: DatadogContext) throws -> DataUploadStatus {
-        uploadedEvents += events
-        try onUpload?()
-        return uploadStatus
+    func upload(
+        events: [DatadogInternal.Event],
+        context: DatadogInternal.DatadogContext,
+        previous: DataUploadStatus?) throws -> DataUploadStatus {
+            uploadedEvents += events
+            try onUpload?(previous)
+            let attempt: UInt
+            if let previous = previous {
+                attempt = previous.attempt + 1
+            } else {
+                attempt = 0
+            }
+            return uploadStatuses[Int(attempt)]
     }
 }
 
@@ -332,7 +336,8 @@ extension DataUploadStatus: RandomMockable {
             needsRetry: .random(),
             responseCode: .mockRandom(),
             userDebugDescription: .mockRandom(),
-            error: nil
+            error: nil,
+            attempt: .mockRandom()
         )
     }
 
@@ -340,13 +345,15 @@ extension DataUploadStatus: RandomMockable {
         needsRetry: Bool = .mockAny(),
         responseCode: Int = .mockAny(),
         userDebugDescription: String = .mockAny(),
-        error: DataUploadError? = nil
+        error: DataUploadError? = nil,
+        attempt: UInt = 0
     ) -> DataUploadStatus {
         return DataUploadStatus(
             needsRetry: needsRetry,
             responseCode: responseCode,
             userDebugDescription: userDebugDescription,
-            error: error
+            error: error,
+            attempt: attempt
         )
     }
 }

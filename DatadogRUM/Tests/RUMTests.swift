@@ -91,8 +91,8 @@ class RUMTests: XCTestCase {
         let crashReportReceiver = (rum.messageReceiver as! CombinedFeatureMessageReceiver).receivers.firstElement(of: CrashReportReceiver.self)
         XCTAssertEqual(monitor.scopes.dependencies.rumApplicationID, applicationID)
         XCTAssertEqual(monitor.scopes.dependencies.sessionSampler.samplingRate, 100)
+        XCTAssertEqual(monitor.scopes.dependencies.sessionEndedMetric.sampleRate, 15)
         XCTAssertEqual(telemetryReceiver?.configurationExtraSampler.samplingRate, 20)
-        XCTAssertEqual(telemetryReceiver?.metricsExtraSampler.samplingRate, 15)
         XCTAssertEqual(crashReportReceiver?.sessionSampler.samplingRate, 100)
     }
 
@@ -110,7 +110,7 @@ class RUMTests: XCTestCase {
         let rum = try XCTUnwrap(core.get(feature: RUMFeature.self))
         let monitor = try XCTUnwrap(RUMMonitor.shared(in: core) as? Monitor)
         XCTAssertIdentical(monitor, rum.instrumentation.viewsHandler.subscriber)
-        XCTAssertIdentical(monitor, (rum.instrumentation.actionsHandler as? UIKitRUMUserActionsHandler)?.subscriber)
+        XCTAssertIdentical(monitor, (rum.instrumentation.actionsHandler as? RUMActionsHandler)?.subscriber)
         XCTAssertIdentical(monitor, rum.instrumentation.longTasks?.subscriber)
         XCTAssertIdentical(monitor, rum.instrumentation.appHangs?.nonFatalHangsHandler.subscriber)
     }
@@ -131,9 +131,13 @@ class RUMTests: XCTestCase {
         XCTAssertIdentical(
             monitor,
             rum.instrumentation.viewsHandler.subscriber,
-            "It must always subscribe RUM monitor to `RUMViewsHandler` as it is required for manual SwiftUI instrumentation"
+            "It must always subscribe RUM monitor to `RUMViewsHandler` as it is required for SwiftUI instrumentation"
         )
-        XCTAssertNil(rum.instrumentation.actionsHandler)
+        XCTAssertIdentical(
+            monitor,
+            (rum.instrumentation.actionsHandler as? RUMActionsHandler)?.subscriber,
+            "It must always subscribe RUM monitor to `RUMActionsHandler` as it is required for SwiftUI instrumentation"
+        )
         XCTAssertNil(rum.instrumentation.longTasks)
         XCTAssertNil(rum.instrumentation.appHangs)
     }
@@ -408,7 +412,7 @@ class RUMTests: XCTestCase {
         // When
         config = RUM.Configuration(applicationID: applicationID)
         config.uuidGenerator = RUMUUIDGeneratorMock(uuid: sessionID)
-        config.sessionSampleRate = 100
+        config.sessionSampleRate = .maxSampleRate
         RUM.enable(with: config, in: core)
 
         // Then

@@ -4,6 +4,7 @@
  * Copyright 2019-Present Datadog, Inc.
  */
 
+#if os(iOS)
 import Foundation
 @testable import DatadogSessionReplay
 
@@ -11,7 +12,10 @@ import Foundation
 internal class ResourceProcessorSpy: ResourceProcessing {
     var processedResources: [(resources: [Resource], context: EnrichedResource.Context)] = []
 
+    var resources: [Resource] { processedResources.reduce([]) { $0 + $1.resources } }
+
     func process(resources: [Resource], context: EnrichedResource.Context) {
         processedResources.append((resources: resources, context: context))
     }
 }
+#endif

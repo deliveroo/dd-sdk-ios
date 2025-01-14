@@ -39,7 +39,7 @@ internal extension XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        DDAssertSimulatorDevice("iPhone14,7", "16.2", file: file, line: line)
+        DDAssertSimulatorDevice("iPhone15,4", "iPhone15", "17.5", file: file, line: line)
 
         if record {
             DDSaveSnapshotIfDifferent(image: newImage, into: snapshotLocation, file: file, line: line)
@@ -54,8 +54,8 @@ internal extension XCTestCase {
     }
 
     /// Asserts that tests are executed on given iOS Simulator.
-    private func DDAssertSimulatorDevice(_ expectedModel: String, _ expectedOSVersion: String, file: StaticString = #filePath, line: UInt = #line) {
-        _DDEvaluateAssertion(message: "Snapshots must be compared on \(expectedModel) Simulator with iOS \(expectedModel)", file: file, line: line) {
+    private func DDAssertSimulatorDevice(_ expectedModel: String, _ expectedModelPrettyName: String, _ expectedOSVersion: String, file: StaticString = #filePath, line: UInt = #line) {
+        _DDEvaluateAssertion(message: "Snapshots must be compared on \(expectedModel) Simulator (\(expectedModelPrettyName)) and iOS \(expectedOSVersion)", file: file, line: line) {
             guard let actualModel = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] else {
                 throw DDAssertError.expectedFailure("Not running in Simulator")
             }
@@ -151,7 +151,6 @@ internal extension XCTestCase {
 //
 // Modifications made:
 // - simplification of platform & version specific code branches
-import UIKit
 import CoreImage.CIKernel
 import MetalPerformanceShaders
 
@@ -182,7 +181,9 @@ internal func compare(_ old: UIImage, _ new: UIImage, precision: Float, perceptu
         return "Reference image's data could not be loaded."
     }
     if let newContext = context(for: newCgImage), let newData = newContext.data {
-        if memcmp(oldData, newData, byteCount) == 0 { return nil }
+        if memcmp(oldData, newData, byteCount) == 0 {
+            return nil
+        }
     }
     var newerBytes = [UInt8](repeating: 0, count: byteCount)
     guard
@@ -193,7 +194,9 @@ internal func compare(_ old: UIImage, _ new: UIImage, precision: Float, perceptu
     else {
         return "Newly-taken snapshot's data could not be loaded."
     }
-    if memcmp(oldData, newerData, byteCount) == 0 { return nil }
+    if memcmp(oldData, newerData, byteCount) == 0 {
+        return nil
+    }
     if precision >= 1, perceptualPrecision >= 1 {
         return "Newly-taken snapshot does not match reference."
     }
@@ -262,7 +265,9 @@ func perceptuallyCompare(_ old: CIImage, _ new: CIImage, pixelPrecision: Float, 
         colorSpace: nil
     )
     let actualPixelPrecision = 1 - averagePixel
-    guard actualPixelPrecision < pixelPrecision else { return nil }
+    guard actualPixelPrecision < pixelPrecision else {
+        return nil
+    }
     var maximumDeltaE: Float = 0
     context.render(
         deltaOutputImage.applyingFilter("CIAreaMaximum", parameters: [kCIInputExtentKey: new.extent]),

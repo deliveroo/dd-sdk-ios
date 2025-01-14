@@ -158,6 +158,10 @@ extension Dictionary: RandomMockable where Key: RandomMockable, Value: RandomMoc
     public static func mockRandom() -> Dictionary {
         return [Key.mockRandom(): Value.mockRandom()]
     }
+
+    public static func mockRandom(count: Int) -> Dictionary {
+        return (0..<count).reduce(into: [:]) { dict, _ in dict[.mockRandom()] = .mockRandom() }
+    }
 }
 
 extension Set: AnyMockable where Element: AnyMockable {
@@ -169,6 +173,10 @@ extension Set: AnyMockable where Element: AnyMockable {
 extension Set: RandomMockable where Element: RandomMockable {
     public static func mockRandom() -> Set<Element> {
         return Set([Element].mockRandom())
+    }
+
+    public static func mockRandom(count: Int) -> Set<Element> {
+        return Set([Element].mockRandom(count: count))
     }
 }
 
@@ -487,9 +495,9 @@ public class BundleMock: Bundle {
     fileprivate var _CFBundleExecutable: String? = nil
     // swiftlint:enable identifier_name
 
-    public override var bundlePath: String { _bundlePath }
-    public override var bundleIdentifier: String? { _bundleIdentifier }
-    public override func object(forInfoDictionaryKey key: String) -> Any? {
+    override public var bundlePath: String { _bundlePath }
+    override public var bundleIdentifier: String? { _bundleIdentifier }
+    override public func object(forInfoDictionaryKey key: String) -> Any? {
         switch key {
         case "CFBundleVersion": return _CFBundleVersion
         case "CFBundleShortVersionString": return _CFBundleShortVersionString
@@ -599,12 +607,11 @@ public class ProcessInfoMock: ProcessInfo {
         _arguments = arguments
     }
 
-    public override var isLowPowerModeEnabled: Bool { _isLowPowerModeEnabled }
+    override public var isLowPowerModeEnabled: Bool { _isLowPowerModeEnabled }
 
-    public override var environment: [String : String] { _environment }
+    override public var environment: [String: String] { _environment }
 
-    public override var arguments: [String] { _arguments }
-
+    override public var arguments: [String] { _arguments }
 }
 
 // MARK: - URLSession
@@ -620,7 +627,7 @@ extension URLSessionTask {
         return URLSessionDataTaskMock(request: .mockAny(), response: .mockAny())
     }
 
-    public static func mockWith(request: URLRequest, response: HTTPURLResponse) -> URLSessionDataTask {
+    public static func mockWith(request: URLRequest = .mockAny(), response: HTTPURLResponse = .mockAny()) -> URLSessionDataTask {
         return URLSessionDataTaskMock(request: request, response: response)
     }
 }

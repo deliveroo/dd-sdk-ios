@@ -19,7 +19,9 @@ internal class RUMUserActionScope: RUMScope, RUMContextProvider {
     // MARK: - Initialization
 
     private unowned let parent: RUMContextProvider
-    private let dependencies: RUMScopeDependencies
+
+    /// Container bundling dependencies for this scope.
+    let dependencies: RUMScopeDependencies
 
     /// The type of this User Action.
     internal let actionType: RUMActionType
@@ -30,6 +32,8 @@ internal class RUMUserActionScope: RUMScope, RUMContextProvider {
 
     /// This User Action's UUID.
     let actionUUID: RUMUUID
+    /// The type of instrumentation that issued an action that created this scope.
+    let instrumentation: InstrumentationType
     /// The start time of this User Action.
     private let actionStartTime: Date
 
@@ -68,6 +72,7 @@ internal class RUMUserActionScope: RUMScope, RUMContextProvider {
         startTime: Date,
         serverTimeOffset: TimeInterval,
         isContinuous: Bool,
+        instrumentation: InstrumentationType,
         onActionEventSent: @escaping (RUMActionEvent) -> Void
     ) {
         self.parent = parent
@@ -80,6 +85,7 @@ internal class RUMUserActionScope: RUMScope, RUMContextProvider {
         self.serverTimeOffset = serverTimeOffset
         self.isContinuous = isContinuous
         self.lastActivityTime = startTime
+        self.instrumentation = instrumentation
         self.onActionEventSent = onActionEventSent
     }
 
@@ -130,6 +136,7 @@ internal class RUMUserActionScope: RUMScope, RUMContextProvider {
     // MARK: - Sending RUM Events
 
     private func sendActionEvent(completionTime: Date, on command: RUMCommand?, context: DatadogContext, writer: Writer) {
+        attributes.merge(rumCommandAttributes: command?.globalAttributes)
         attributes.merge(rumCommandAttributes: command?.attributes)
 
         var frustrations: [RUMActionEvent.Action.Frustration.FrustrationType]? = nil
@@ -168,7 +175,7 @@ internal class RUMUserActionScope: RUMScope, RUMContextProvider {
             date: actionStartTime.addingTimeInterval(serverTimeOffset).timeIntervalSince1970.toInt64Milliseconds,
             device: .init(context: context, telemetry: dependencies.telemetry),
             display: nil,
-            os: .init(context: context),
+            os: .init(device: context.device),
             service: context.service,
             session: .init(
                 hasReplay: context.hasReplay,

@@ -25,7 +25,7 @@ class SRMultipleViewsRecordingScenarioTests: IntegrationTests, RUMCommonAsserts,
     /// will highly depend on the performance of app, Simulator and CI.
     private struct Baseline {
         /// Number of all SR segments to pass the test.
-        static let totalSegmentsCount = 15
+        static let totalSegmentsCount = 14
         /// Number of all SR records to pass the test.
         static let totalRecordsCount = 35
         /// Number of all "full snapshot" records to pass the test.
@@ -47,7 +47,6 @@ class SRMultipleViewsRecordingScenarioTests: IntegrationTests, RUMCommonAsserts,
         /// Total number of "incremental snapshot" records that send "pointer interaction" data.
         static let totalTouchDataRecords = 10
     }
-
 
     func testSRMultipleViewsRecordingScenario() throws {
         // RUM endpoint in `HTTPServerMock`

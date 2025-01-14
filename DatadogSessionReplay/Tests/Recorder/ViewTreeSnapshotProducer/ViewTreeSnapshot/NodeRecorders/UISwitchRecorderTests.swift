@@ -4,12 +4,13 @@
  * Copyright 2019-Present Datadog, Inc.
  */
 
+#if os(iOS)
 import XCTest
 @_spi(Internal)
 @testable import DatadogSessionReplay
 
 class UISwitchRecorderTests: XCTestCase {
-    private let recorder = UISwitchRecorder()
+    private let recorder = UISwitchRecorder(identifier: UUID())
     /// The label under test.
     private let `switch` = UISwitch()
     /// `ViewAttributes` simulating common attributes of switch's `UIView`.
@@ -55,3 +56,4 @@ class UISwitchRecorderTests: XCTestCase {
         XCTAssertNil(recorder.semantics(of: view, with: viewAttributes, in: .mockAny()))
     }
 }
+#endif

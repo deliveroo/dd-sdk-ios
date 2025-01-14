@@ -9,8 +9,10 @@
 
 #import "ObjcAppLaunchHandler.h"
 
-#if TARGET_OS_IOS || TARGET_OS_TV
+#if TARGET_OS_IOS || TARGET_OS_TV || TARGET_OS_MACCATALYST || TARGET_OS_VISION
 #import <UIKit/UIKit.h>
+#elif TARGET_OS_OSX
+#import <AppKit/AppKit.h>
 #endif
 
 // A very long application launch time is most-likely the result of a pre-warmed process.
@@ -42,9 +44,17 @@ static __dd_private_AppLaunchHandler *_shared;
     // This is called at the `DatadogPrivate` load time, keep the work minimal
     _shared = [[self alloc] initWithProcessInfo:NSProcessInfo.processInfo
                                        loadTime:CFAbsoluteTimeGetCurrent()];
-#if TARGET_OS_IOS || TARGET_OS_TV
+
+    NSString *notificationName;
+#if TARGET_OS_IOS || TARGET_OS_TV || TARGET_OS_MACCATALYST || TARGET_OS_VISION
+    notificationName = UIApplicationDidBecomeActiveNotification;
+#elif TARGET_OS_OSX
+    notificationName = NSApplicationDidBecomeActiveNotification;
+#endif
+
+#if TARGET_OS_IOS || TARGET_OS_TV || TARGET_OS_MACCATALYST || TARGET_OS_VISION || TARGET_OS_OSX
     NSNotificationCenter * __weak center = NSNotificationCenter.defaultCenter;
-    id __block __unused token = [center addObserverForName:UIApplicationDidBecomeActiveNotification
+    id __block __unused token = [center addObserverForName:notificationName
                                                     object:nil
                                                      queue:NSOperationQueue.mainQueue
                                                 usingBlock:^(NSNotification *_){
@@ -127,7 +137,8 @@ int processStartTimeIntervalSinceReferenceDate(NSTimeInterval *timeInterval) {
 
     // The process' start time is provided relative to 1 Jan 1970
     struct timeval startTime = kip.kp_proc.p_starttime;
-    NSTimeInterval processStartTime = startTime.tv_sec + startTime.tv_usec / USEC_PER_SEC;
+    // Multiplication with 1.0 ensure we don't round to 0 with integer division
+    NSTimeInterval processStartTime = startTime.tv_sec + (1.0 * startTime.tv_usec) / USEC_PER_SEC;
     // Convert to time since 1 Jan 2001 to align with CFAbsoluteTimeGetCurrent()
     *timeInterval = processStartTime - kCFAbsoluteTimeIntervalSince1970;
     return res;

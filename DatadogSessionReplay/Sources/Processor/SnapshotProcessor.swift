@@ -33,8 +33,6 @@ internal protocol SnapshotProcessing {
 internal class SnapshotProcessor: SnapshotProcessing {
     /// Flattens VTS received from `Recorder` by removing invisible nodes.
     private let nodesFlattener = NodesFlattener()
-    /// Builds SR wireframes to describe UI elements.
-    private let wireframesBuilder = WireframesBuilder()
     /// Builds SR records to transport SR wireframes.
     private let recordsBuilder: RecordsBuilder
 
@@ -42,6 +40,8 @@ internal class SnapshotProcessor: SnapshotProcessing {
     private let queue: Queue
     /// Writes records to `DatadogCore`.
     private let recordWriter: RecordWriting
+    /// Processes resources on a background thread.
+    private let resourceProcessor: ResourceProcessing
     /// Sends telemetry through sdk core.
     private let telemetry: Telemetry
 
@@ -61,11 +61,13 @@ internal class SnapshotProcessor: SnapshotProcessing {
     init(
         queue: Queue,
         recordWriter: RecordWriting,
+        resourceProcessor: ResourceProcessing,
         srContextPublisher: SRContextPublisher,
         telemetry: Telemetry
     ) {
         self.queue = queue
         self.recordWriter = recordWriter
+        self.resourceProcessor = resourceProcessor
         self.srContextPublisher = srContextPublisher
         self.telemetry = telemetry
         self.recordsBuilder = RecordsBuilder(telemetry: telemetry)
@@ -78,10 +80,16 @@ internal class SnapshotProcessor: SnapshotProcessing {
     }
 
     private func processSync(viewTreeSnapshot: ViewTreeSnapshot, touchSnapshot: TouchSnapshot?) {
-        let flattenedNodes = nodesFlattener.flattenNodes(in: viewTreeSnapshot)
-        let wireframes: [SRWireframe] = flattenedNodes
-            .map { node in node.wireframesBuilder }
-            .flatMap { nodeBuilder in nodeBuilder.buildWireframes(with: wireframesBuilder) }
+        let builder = WireframesBuilder(webViewSlotIDs: viewTreeSnapshot.webViewSlotIDs)
+        let nodes = nodesFlattener.flattenNodes(in: viewTreeSnapshot)
+
+        // build wireframe from nodes
+        var wireframes: [SRWireframe] = nodes.flatMap { node in
+            node.wireframesBuilder.buildWireframes(with: builder)
+        }
+
+        // build hidden webview wireframes and place them at the beginning
+        wireframes = builder.hiddenWebViewWireframes() + wireframes
 
         interceptWireframes?(wireframes)
 
@@ -134,6 +142,11 @@ internal class SnapshotProcessor: SnapshotProcessing {
         // Track state:
         lastSnapshot = viewTreeSnapshot
         lastWireframes = wireframes
+
+        resourceProcessor.process(
+            resources: builder.resources,
+            context: .init(viewTreeSnapshot.context.applicationID)
+        )
     }
 
     private func trackRecord(key: String, value: Int64) {

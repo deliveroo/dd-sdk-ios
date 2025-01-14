@@ -107,12 +107,11 @@ class NetworkInstrumentationIntegrationTests: XCTestCase {
                 applicationID: .mockAny(),
                 urlSessionTracking: .init(
                     resourceAttributesProvider: { req, resp, data, err in
-                        XCTAssertNotNil(data)
-                        XCTAssertTrue(data!.count > 0)
-                        providerDataCount = data!.count
+                        providerDataCount = data?.count ?? 0
                         providerExpectation.fulfill()
                         return [:]
-                })
+                    }
+                )
             ),
             in: core
         )
@@ -149,20 +148,18 @@ class NetworkInstrumentationIntegrationTests: XCTestCase {
         )
 
         let providerExpectation = expectation(description: "provider called")
-        var providerDataCount = 0
-        var providerData: Data?
+        var providerInfo: (resp: URLResponse?, data: Data?, err: Error?)?
+
         RUM.enable(
             with: .init(
                 applicationID: .mockAny(),
                 urlSessionTracking: .init(
-                    resourceAttributesProvider: { req, resp, data, err in
-                        XCTAssertNotNil(data)
-                        XCTAssertTrue(data!.count > 0)
-                        providerDataCount = data!.count
-                        data.map { providerData = $0 }
+                    resourceAttributesProvider: { _, resp, data, err in
+                        providerInfo = (resp, data, err)
                         providerExpectation.fulfill()
                         return [:]
-                })
+                    }
+                )
             ),
             in: core
         )
@@ -182,20 +179,18 @@ class NetworkInstrumentationIntegrationTests: XCTestCase {
         let request = URLRequest(url: URL(string: "https://www.datadoghq.com/")!)
 
         let taskExpectation = self.expectation(description: "task completed")
-        var taskDataCount = 0
-        var taskData: Data?
-        let task = session.dataTask(with: request) { data, _, _ in
-            XCTAssertNotNil(data)
-            XCTAssertTrue(data!.count > 0)
-            taskDataCount = data!.count
-            data.map { taskData = $0 }
+        var taskInfo: (resp: URLResponse?, data: Data?, err: Error?)?
+
+        let task = session.dataTask(with: request) { resp, data, err in
+            taskInfo = (data, resp, err)
             taskExpectation.fulfill()
         }
         task.resume()
 
         wait(for: [providerExpectation, taskExpectation], timeout: 10)
-        XCTAssertEqual(providerDataCount, taskDataCount)
-        XCTAssertEqual(providerData, taskData)
+        XCTAssertEqual(providerInfo?.resp, taskInfo?.resp)
+        XCTAssertEqual(providerInfo?.data, taskInfo?.data)
+        XCTAssertEqual(providerInfo?.err as? NSError, taskInfo?.err as? NSError)
     }
 
     class InstrumentedSessionDelegate: NSObject, URLSessionDataDelegate {

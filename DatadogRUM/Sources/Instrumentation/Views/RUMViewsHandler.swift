@@ -25,6 +25,9 @@ internal final class RUMViewsHandler {
 
         /// Custom attributes to attach to the View.
         let attributes: [AttributeKey: AttributeValue]
+
+        /// The type of instrumentation that started this view.
+        let instrumentationType: SessionEndedMetric.ViewInstrumentationType
     }
 
     /// The current date provider.
@@ -62,7 +65,7 @@ internal final class RUMViewsHandler {
     init(
         dateProvider: DateProvider,
         predicate: UIKitRUMViewsPredicate?,
-        notificationCenter: NotificationCenter = .default
+        notificationCenter: NotificationCenter
     ) {
         self.dateProvider = dateProvider
         self.predicate = predicate
@@ -139,12 +142,13 @@ internal final class RUMViewsHandler {
 
     private func start(view: View) {
         guard let subscriber = subscriber else {
-            return DD.logger.warn(
+            DD.logger.warn(
                 """
-                RUM View was started, but no `RUMMonitor` is registered on `Global.rum`. RUM instrumentation will not work.
-                Make sure `Global.rum = RUMMonitor.initialize()` is called before any view appears.
+                A RUM view was started with \(view.instrumentationType) instrumentation, but RUM tracking appears to be disabled.
+                Ensure `RUM.enable()` is called before starting any views.
                 """
             )
+            return
         }
 
         guard !view.isUntrackedModal else {
@@ -157,7 +161,8 @@ internal final class RUMViewsHandler {
                 identity: view.identity,
                 name: view.name,
                 path: view.path,
-                attributes: view.attributes
+                attributes: view.attributes,
+                instrumentationType: view.instrumentationType
             )
         )
     }
@@ -205,7 +210,8 @@ extension RUMViewsHandler: UIViewControllerHandler {
                     name: rumView.name,
                     path: rumView.path ?? viewController.canonicalClassName,
                     isUntrackedModal: rumView.isUntrackedModal,
-                    attributes: rumView.attributes
+                    attributes: rumView.attributes,
+                    instrumentationType: .uikit
                 )
             )
         } else if #available(iOS 13, tvOS 13, *), viewController.isModalInPresentation {
@@ -215,7 +221,8 @@ extension RUMViewsHandler: UIViewControllerHandler {
                     name: "RUMUntrackedModal",
                     path: viewController.canonicalClassName,
                     isUntrackedModal: true,
-                    attributes: [:]
+                    attributes: [:],
+                    instrumentationType: .uikit
                 )
             )
         }
@@ -240,7 +247,8 @@ extension RUMViewsHandler: SwiftUIViewHandler {
                 name: name,
                 path: path,
                 isUntrackedModal: false,
-                attributes: attributes
+                attributes: attributes,
+                instrumentationType: .swiftui
             )
         )
     }

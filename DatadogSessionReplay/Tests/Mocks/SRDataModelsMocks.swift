@@ -4,7 +4,10 @@
  * Copyright 2019-Present Datadog, Inc.
  */
 
+#if os(iOS)
 import Foundation
+import XCTest
+
 @_spi(Internal)
 @testable import DatadogSessionReplay
 @testable import TestUtilities
@@ -1123,7 +1126,8 @@ extension SRSegment.Source: AnyMockable, RandomMockable {
             .android,
             .ios,
             .flutter,
-            .reactNative
+            .reactNative,
+            .kotlinMultiplatform
         ].randomElement()!
     }
 }
@@ -1255,6 +1259,40 @@ extension SRIncrementalSnapshotRecord {
     }
 }
 
+extension SRWireframe {
+    var textWireframe: SRTextWireframe? {
+        guard case let .textWireframe(wireframe) = self else {
+            return nil
+        }
+
+        return wireframe
+    }
+
+    var shapeWireframe: SRShapeWireframe? {
+        guard case let .shapeWireframe(wireframe) = self else {
+            return nil
+        }
+
+        return wireframe
+    }
+
+    var imageWireframe: SRImageWireframe? {
+        guard case let .imageWireframe(wireframe) = self else {
+            return nil
+        }
+
+        return wireframe
+    }
+
+    var placeholderWireframe: SRPlaceholderWireframe? {
+        guard case let .placeholderWireframe(wireframe) = self else {
+            return nil
+        }
+
+        return wireframe
+    }
+}
+
 private extension Double {
     /// Returns random integer from given range represented as `Double`.
     static func randomInteger(min: Int = -10_000, max: Int = 10_000) -> Double {
@@ -1262,3 +1300,4 @@ private extension Double {
         return Double(integer)
     }
 }
+#endif

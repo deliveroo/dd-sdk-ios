@@ -20,6 +20,7 @@ internal struct FeatureUpload {
         performance: PerformancePreset,
         backgroundTasksEnabled: Bool,
         maxBatchesPerUpload: Int,
+        isRunFromExtension: Bool,
         telemetry: Telemetry
     ) {
         let uploadQueue = DispatchQueue(
@@ -34,9 +35,19 @@ internal struct FeatureUpload {
         )
 
         #if canImport(UIKit)
-        let backgroundTaskCoordinator = backgroundTasksEnabled
-            ? UIKitBackgroundTaskCoordinator()
-            : nil
+        let backgroundTaskCoordinator: BackgroundTaskCoordinator?
+        switch (backgroundTasksEnabled, isRunFromExtension) {
+        case (true, false):
+            #if os(watchOS)
+            backgroundTaskCoordinator = ExtensionBackgroundTaskCoordinator()
+            #else
+            backgroundTaskCoordinator = AppBackgroundTaskCoordinator()
+            #endif
+        case (true, true):
+            backgroundTaskCoordinator = ExtensionBackgroundTaskCoordinator()
+        case (false, _):
+            backgroundTaskCoordinator = nil
+        }
         #else
         let backgroundTaskCoordinator: BackgroundTaskCoordinator? = nil
         #endif

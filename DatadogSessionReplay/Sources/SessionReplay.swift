@@ -20,7 +20,8 @@ public enum SessionReplay {
     ///   - configuration: Configuration of the feature.
     ///   - core: The instance of Datadog SDK to enable Session Replay in (global instance by default).
     public static func enable(
-        with configuration: SessionReplay.Configuration, in core: DatadogCoreProtocol = CoreRegistry.default
+        with configuration: SessionReplay.Configuration,
+        in core: DatadogCoreProtocol = CoreRegistry.default
     ) {
         do {
             try enableOrThrow(with: configuration, in: core)
@@ -29,16 +30,53 @@ public enum SessionReplay {
        }
     }
 
-    internal static let maxObjectSize = 10.MB.asUInt64()
+    /// Starts the recording manually.
+    /// - Parameters:
+    ///   - core: The instance of Datadog SDK to start Session Replay in (global instance by default).
+    public static func startRecording(
+        in core: DatadogCoreProtocol = CoreRegistry.default
+    ) {
+        do {
+            try startRecording(core: core)
+        } catch let error {
+            consolePrint("\(error)", .error)
+        }
+    }
+
+    /// Stops the recording manually.
+    /// - Parameters:
+    ///   - core: The instance of Datadog SDK to start Session Replay in (global instance by default).
+    public static func stopRecording(
+        in core: DatadogCoreProtocol = CoreRegistry.default
+    ) {
+        do {
+            try stopRecording(core: core)
+        } catch let error {
+            consolePrint("\(error)", .error)
+        }
+    }
+
+    // MARK: Internal
+
+    internal static let maxObjectSize = 10.MB.asUInt32()
 
     internal static func enableOrThrow(
-        with configuration: SessionReplay.Configuration, in core: DatadogCoreProtocol
+        with configuration: SessionReplay.Configuration,
+        in core: DatadogCoreProtocol
     ) throws {
         guard !(core is NOPDatadogCore) else {
             throw ProgrammerError(
                 description: "Datadog SDK must be initialized before calling `SessionReplay.enable(with:)`."
             )
         }
+
+        guard !CoreRegistry.isFeatureEnabled(feature: SessionReplayFeature.self) else {
+            core.telemetry.debug("Session Replay has already been enabled")
+            throw ProgrammerError(
+                description: "Session Replay is already enabled and does not support multiple instances. The existing instance will continue to be used."
+            )
+        }
+
         guard configuration.replaySampleRate > 0 else {
             return
         }
@@ -49,9 +87,28 @@ public enum SessionReplay {
         try core.register(feature: sessionReplay)
 
         core.telemetry.configuration(
-            defaultPrivacyLevel: configuration.defaultPrivacyLevel.rawValue,
-            sessionReplaySampleRate: Int64(withNoOverflow: configuration.replaySampleRate)
+            defaultPrivacyLevel: nil,
+            textAndInputPrivacyLevel: configuration.textAndInputPrivacyLevel.rawValue,
+            imagePrivacyLevel: configuration.imagePrivacyLevel.rawValue,
+            touchPrivacyLevel: configuration.touchPrivacyLevel.rawValue,
+            sessionReplaySampleRate: Int64(withNoOverflow: configuration.replaySampleRate),
+            startRecordingImmediately: configuration.startRecordingImmediately
         )
+    }
+
+    internal static func startRecording(core: DatadogCoreProtocol) throws {
+        guard let sr = core.get(feature: SessionReplayFeature.self) else {
+            throw ProgrammerError(
+                description: "Session Replay must be initialized before calling `SessionReplay.startRecording()`."
+            )
+        }
+
+        sr.startRecording()
+    }
+
+    internal static func stopRecording(core: DatadogCoreProtocol) throws {
+        let sr = core.get(feature: SessionReplayFeature.self)
+        sr?.stopRecording()
     }
 }
 #endif

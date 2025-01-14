@@ -89,6 +89,15 @@ custom_rules:
       - doccomment
     message: "`UIApplication.shared` is unavailable in some environments. Check `UIApplication.managedShared`."
     severity: error
+  unsafe_all_http_header_fields: # prevents from using `URLRequest.allHTTPHeaderFields` API
+    included: Sources
+    name: "Unsafe API: `URLRequest.allHTTPHeaderFields`"
+    regex: '\.allHTTPHeaderFields'
+    excluded_match_kinds: 
+      - comment
+      - doccomment
+    message: "`URLRequest.allHTTPHeaderFields` is considered unsafe. Prefer using `URLRequest.value(forHTTPHeaderField:)`. See full context in https://github.com/DataDog/dd-sdk-ios/pull/1843"
+    severity: error
   required_reason_api_name: # prevents from declaring symbols that may conflict with Apple's Required Reason APIs
     included: Sources
     name: "Required Reason API Conflict"
@@ -156,12 +165,12 @@ included:
   - ../../DatadogWebViewTracking/Sources
   - ../../DatadogObjc/Sources
   - ../../Datadog/E2E
-  - ../../instrumented-tests/http-server-mock/Sources
+  - ../../tools/http-server-mock/Sources
   - ../../tools/api-surface/Sources
   - ../../tools/api-surface/Fixtures/Sources
   - ../../tools/rum-models-generator/Sources
   - ../../tools/rum-models-generator/Tests/rum-models-generator-coreTests/Fixtures/Output # lint generation fixture
   - ../../tools/sr-snapshots/Sources
-  - ../../dependency-manager-tests/carthage/CTProject
-  - ../../dependency-manager-tests/cocoapods/CPProject
-  - ../../dependency-manager-tests/spm/SPMProject
+  - ../../SmokeTests/carthage/CTProject
+  - ../../SmokeTests/cocoapods/CPProject
+  - ../../SmokeTests/spm/SPMProject

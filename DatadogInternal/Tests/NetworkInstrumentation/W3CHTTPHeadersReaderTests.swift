@@ -27,18 +27,29 @@ class W3CHTTPHeadersReaderTests: XCTestCase {
     }
 
     func testReadingSampledTraceContext() {
-        let writer = W3CHTTPHeadersWriter(sampleRate: 100)
-        writer.write(traceID: .mockAny(), spanID: .mockAny(), parentSpanID: .mockAny())
+        let writer = W3CHTTPHeadersWriter(samplingStrategy: .custom(sampleRate: 100), traceContextInjection: .all)
+        writer.write(traceContext: .mockRandom())
 
         let reader = W3CHTTPHeadersReader(httpHeaderFields: writer.traceHeaderFields)
         XCTAssertNotNil(reader.read(), "When sampled, it should return trace context")
+        XCTAssertEqual(reader.sampled, true)
     }
 
-    func testReadingNotSampledTraceContext() {
-        let writer = W3CHTTPHeadersWriter(sampleRate: 0)
-        writer.write(traceID: .mockAny(), spanID: .mockAny(), parentSpanID: .mockAny())
+    func testReadingNotSampledTraceContext_givenTraceContextInjectionIsAll() {
+        let writer = W3CHTTPHeadersWriter(samplingStrategy: .custom(sampleRate: 0), traceContextInjection: .all)
+        writer.write(traceContext: .mockRandom())
 
         let reader = W3CHTTPHeadersReader(httpHeaderFields: writer.traceHeaderFields)
         XCTAssertNil(reader.read(), "When not sampled, it should return no trace context")
+        XCTAssertEqual(reader.sampled, false)
+    }
+
+    func testReadingNotSampledTraceContext_givenTraceContextInjectionIsSampled() {
+        let writer = W3CHTTPHeadersWriter(samplingStrategy: .custom(sampleRate: 0), traceContextInjection: .sampled)
+        writer.write(traceContext: .mockRandom())
+
+        let reader = W3CHTTPHeadersReader(httpHeaderFields: writer.traceHeaderFields)
+        XCTAssertNil(reader.read(), "When not sampled, it should not return trace context")
+        XCTAssertNil(reader.sampled)
     }
 }

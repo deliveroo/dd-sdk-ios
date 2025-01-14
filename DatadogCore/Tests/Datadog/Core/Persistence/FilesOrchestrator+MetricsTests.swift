@@ -38,7 +38,8 @@ class FilesOrchestrator_MetricsTests: XCTestCase {
             metricsData: FilesOrchestrator.MetricsData(
                 trackName: "track name",
                 consentLabel: "consent value",
-                uploaderPerformance: upload
+                uploaderPerformance: upload,
+                backgroundTasksEnabled: .mockAny()
             )
         )
     }
@@ -68,9 +69,11 @@ class FilesOrchestrator_MetricsTests: XCTestCase {
             ],
             "uploader_window": storage.uploaderWindow.toMilliseconds,
             "in_background": false,
+            "background_tasks_enabled": false,
             "batch_age": expectedBatchAge.toMilliseconds,
             "batch_removal_reason": "intake-code-202",
         ])
+        XCTAssertEqual(metric.sampleRate, BatchDeletedMetric.sampleRate)
     }
 
     func testWhenObsoleteFileIsDeleted_itSendsBatchDeletedMetric() throws {
@@ -97,9 +100,11 @@ class FilesOrchestrator_MetricsTests: XCTestCase {
             ],
             "uploader_window": storage.uploaderWindow.toMilliseconds,
             "in_background": false,
+            "background_tasks_enabled": false,
             "batch_age": (storage.maxFileAgeForRead + 1).toMilliseconds,
             "batch_removal_reason": "obsolete",
         ])
+        XCTAssertEqual(metric.sampleRate, BatchDeletedMetric.sampleRate)
     }
 
     func testWhenDirectoryIsPurged_itSendsBatchDeletedMetrics() throws {
@@ -108,7 +113,7 @@ class FilesOrchestrator_MetricsTests: XCTestCase {
         // - write more data than allowed directory size limit
         storage.maxDirectorySize = 10 // 10 bytes
         let orchestrator = createOrchestrator()
-        let file = try orchestrator.getWritableFile(writeSize: storage.maxDirectorySize + 1)
+        let file = try orchestrator.getWritableFile(writeSize: storage.maxDirectorySize.asUInt64() + 1)
         try file.append(data: .mockRandom(ofSize: storage.maxDirectorySize + 1))
         let expectedBatchAge = storage.minFileAgeForRead + 1
 
@@ -129,9 +134,11 @@ class FilesOrchestrator_MetricsTests: XCTestCase {
             ],
             "uploader_window": storage.uploaderWindow.toMilliseconds,
             "in_background": false,
+            "background_tasks_enabled": false,
             "batch_age": expectedBatchAge.toMilliseconds,
             "batch_removal_reason": "purged",
         ])
+        XCTAssertEqual(metric.sampleRate, BatchDeletedMetric.sampleRate)
     }
 
     // MARK: - "Batch Closed" Metric
@@ -139,17 +146,24 @@ class FilesOrchestrator_MetricsTests: XCTestCase {
     func testWhenNewBatchIsStarted_itSendsBatchClosedMetric() throws {
         // Given
         // - request batch to be created
-        // - request few writes on that batch
+        // - request few writes on that batch, each after certain delay
         let orchestrator = createOrchestrator()
         let expectedWrites: [UInt64] = [10, 5, 2]
-        try expectedWrites.forEach { writeSize in
-            _ = try orchestrator.getWritableFile(writeSize: writeSize)
-        }
+        let expectedWriteDelays: [TimeInterval] = [
+            storage.maxFileAgeForWrite * 0.25,
+            storage.maxFileAgeForWrite * 0.45,
+        ]
+
+        _ = try orchestrator.getWritableFile(writeSize: expectedWrites[0])
+        dateProvider.advance(bySeconds: expectedWriteDelays[0])
+        _ = try orchestrator.getWritableFile(writeSize: expectedWrites[1])
+        dateProvider.advance(bySeconds: expectedWriteDelays[1])
+        _ = try orchestrator.getWritableFile(writeSize: expectedWrites[2])
 
         // When
         // - wait more than allowed batch age for writes, so next batch request will create another batch
         // - then request another batch, which will close the previous one
-        dateProvider.advance(bySeconds: (storage.maxFileAgeForWrite + 1))
+        dateProvider.advance(bySeconds: storage.maxFileAgeForWrite + 1)
         _ = try orchestrator.getWritableFile(writeSize: 1)
 
         // Then
@@ -161,7 +175,8 @@ class FilesOrchestrator_MetricsTests: XCTestCase {
             "uploader_window": storage.uploaderWindow.toMilliseconds,
             "batch_size": expectedWrites.reduce(0, +),
             "batch_events_count": expectedWrites.count,
-            "batch_duration": (storage.maxFileAgeForWrite + 1).toMilliseconds
+            "batch_duration": expectedWriteDelays.reduce(0, +).toMilliseconds
         ])
+        XCTAssertEqual(metric.sampleRate, BatchClosedMetric.sampleRate)
     }
 }

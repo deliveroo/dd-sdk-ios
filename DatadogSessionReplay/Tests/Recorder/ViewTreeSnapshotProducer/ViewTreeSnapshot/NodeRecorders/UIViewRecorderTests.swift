@@ -4,12 +4,13 @@
  * Copyright 2019-Present Datadog, Inc.
  */
 
+#if os(iOS)
 import XCTest
 @_spi(Internal)
 @testable import DatadogSessionReplay
 
 class UIViewRecorderTests: XCTestCase {
-    private let recorder = UIViewRecorder()
+    private let recorder = UIViewRecorder(identifier: UUID())
     /// The view under test.
     private let view = UIView()
     /// `ViewAttributes` simulating common attributes of the view.
@@ -56,4 +57,19 @@ class UIViewRecorderTests: XCTestCase {
         XCTAssertTrue(semantics is AmbiguousElement)
         XCTAssertEqual(semantics.subtreeStrategy, .record)
     }
+
+    func testWhenViewHasHiddenOverride() throws {
+        // Given
+        viewAttributes = .mock(fixture: .visible(.someAppearance))
+        viewAttributes.overrides = .mockWith(hide: true)
+
+        // When
+        let semantics = try XCTUnwrap(recorder.semantics(of: view, with: viewAttributes, in: .mockAny()))
+
+        // Then
+        XCTAssertTrue(semantics is SpecificElement)
+        XCTAssertEqual(semantics.subtreeStrategy, .ignore)
+        XCTAssertTrue(semantics.nodes.first?.wireframesBuilder is UIViewWireframesBuilder)
+    }
 }
+#endif

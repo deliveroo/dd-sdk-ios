@@ -19,7 +19,12 @@
 #pragma clang diagnostic ignored "-Wunused-value"
 
 - (void)testInitWithSamplingRate {
-    [[DDB3HTTPHeadersWriter alloc] initWithSampleRate:100 injectEncoding:DDInjectEncodingSingle];
+    [[DDB3HTTPHeadersWriter alloc] initWithSamplingStrategy:[DDTraceSamplingStrategy headBased]
+                                             injectEncoding:DDInjectEncodingSingle
+                                      traceContextInjection:DDTraceContextInjectionAll];
+    [[DDB3HTTPHeadersWriter alloc] initWithSamplingStrategy:[DDTraceSamplingStrategy customWithSampleRate:50]
+                                             injectEncoding:DDInjectEncodingMultiple
+                                      traceContextInjection:DDTraceContextInjectionAll];
 }
 
 #pragma clang diagnostic pop

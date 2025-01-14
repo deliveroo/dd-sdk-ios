@@ -49,6 +49,8 @@ internal class CrashReportingPluginMock: CrashReportingPlugin {
     var hasPurgedCrashReport: Bool?
     /// Custom app state data injected to the plugin.
     var injectedContextData: Data?
+    /// Custom backtrace reporter injected to the plugin.
+    var injectedBacktraceReporter: BacktraceReporting?
 
     func readPendingCrashReport(completion: (DDCrashReport?) -> Bool) {
         hasPurgedCrashReport = completion(pendingCrashReport)
@@ -65,11 +67,14 @@ internal class CrashReportingPluginMock: CrashReportingPlugin {
 
     /// Notifies the `inject(context:)` return.
     var didInjectContext: (() -> Void)?
+
+    var backtraceReporter: BacktraceReporting? { injectedBacktraceReporter }
 }
 
 internal class NOPCrashReportingPlugin: CrashReportingPlugin {
     func readPendingCrashReport(completion: (DDCrashReport?) -> Bool) {}
     func inject(context: Data) {}
+    var backtraceReporter: BacktraceReporting? { nil }
 }
 
 internal class CrashContextProviderMock: CrashContextProvider {
@@ -93,6 +98,8 @@ class CrashReportSenderMock: CrashReportSender {
     }
 
     var didSendCrashReport: (() -> Void)?
+
+    func send(launch: DatadogInternal.LaunchReport) {}
 }
 
 class RUMCrashReceiverMock: FeatureMessageReceiver {
@@ -144,6 +151,8 @@ extension CrashContext {
         lastRUMViewEvent: AnyCodable? = nil,
         lastRUMSessionState: AnyCodable? = nil,
         lastIsAppInForeground: Bool = .mockAny(),
+        appLaunchDate: Date? = .mockRandomInThePast(),
+        lastRUMAttributes: GlobalRUMAttributes? = nil,
         lastLogAttributes: AnyCodable? = nil
     ) -> Self {
         .init(
@@ -159,9 +168,11 @@ extension CrashContext {
             userInfo: userInfo,
             networkConnectionInfo: networkConnectionInfo,
             carrierInfo: carrierInfo,
+            lastIsAppInForeground: lastIsAppInForeground,
+            appLaunchDate: appLaunchDate,
             lastRUMViewEvent: lastRUMViewEvent,
             lastRUMSessionState: lastRUMSessionState,
-            lastIsAppInForeground: lastIsAppInForeground,
+            lastRUMAttributes: lastRUMAttributes,
             lastLogAttributes: lastLogAttributes
         )
     }
@@ -180,9 +191,11 @@ extension CrashContext {
             userInfo: .mockRandom(),
             networkConnectionInfo: .mockRandom(),
             carrierInfo: .mockRandom(),
+            lastIsAppInForeground: .mockRandom(),
+            appLaunchDate: .mockRandomInThePast(),
             lastRUMViewEvent: AnyCodable(mockRandomAttributes()),
             lastRUMSessionState: AnyCodable(mockRandomAttributes()),
-            lastIsAppInForeground: .mockRandom(),
+            lastRUMAttributes: GlobalRUMAttributes(attributes: mockRandomAttributes()),
             lastLogAttributes: AnyCodable(mockRandomAttributes())
         )
     }
@@ -204,7 +217,8 @@ internal extension DDCrashReport {
         binaryImages: [BinaryImage] = [],
         meta: Meta = .mockAny(),
         wasTruncated: Bool = .mockAny(),
-        context: Data? = .mockAny()
+        context: Data? = .mockAny(),
+        additionalAttributes: [String: Encodable]? = nil
     ) -> DDCrashReport {
         return DDCrashReport(
             date: date,
@@ -215,7 +229,8 @@ internal extension DDCrashReport {
             binaryImages: binaryImages,
             meta: meta,
             wasTruncated: wasTruncated,
-            context: context
+            context: context,
+            additionalAttributes: additionalAttributes
         )
     }
 
@@ -229,7 +244,8 @@ internal extension DDCrashReport {
             type: .mockRandom(),
             message: .mockRandom(),
             stack: .mockRandom(),
-            context: contextData
+            context: contextData,
+            additionalAttributes: mockRandomAttributes()
         )
     }
 }

@@ -4,6 +4,7 @@
  * Copyright 2019-Present Datadog, Inc.
  */
 
+#if os(iOS)
 import XCTest
 import TestUtilities
 import DatadogInternal
@@ -143,7 +144,9 @@ class SegmentJSONTests: XCTestCase {
 
     private func generateEnrichedRecordJSONs(for segment: SRSegment) throws -> [SegmentJSON] {
         let context = Recorder.Context(
-            privacy: .mockRandom(),
+            textAndInputPrivacy: .mockRandom(),
+            imagePrivacy: .mockRandom(),
+            touchPrivacy: .mockRandom(),
             rumContext: RUMContext(
                 applicationID: segment.application.id,
                 sessionID: segment.session.id,
@@ -181,3 +184,4 @@ class SegmentJSONTests: XCTestCase {
         )
     }
 }
+#endif

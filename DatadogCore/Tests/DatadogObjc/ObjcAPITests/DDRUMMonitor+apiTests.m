@@ -45,13 +45,17 @@
 }
 
 - (void)testDDRUMMethodAPI {
-    DDRUMMethodPost; DDRUMMethodGet; DDRUMMethodHead; DDRUMMethodPut; DDRUMMethodDelete; DDRUMMethodPatch;
+    DDRUMMethodPost; DDRUMMethodGet; DDRUMMethodHead; DDRUMMethodPut; DDRUMMethodDelete; DDRUMMethodPatch; DDRUMMethodConnect;
+    DDRUMMethodTrace; DDRUMMethodOptions;
 }
 
 - (void)testDDRUMMonitorAPI {
     UIViewController *anyVC = [UIViewController new];
 
     DDRUMMonitor *monitor = [DDRUMMonitor shared];
+    [monitor currentSessionIDWithCompletion:^(NSString * _Nullable sessionID) {}];
+    [monitor stopSession];
+
     [monitor startViewWithViewController:anyVC name:@"" attributes:@{}];
     [monitor stopViewWithViewController:anyVC attributes:@{}];
     [monitor startViewWithKey:@"" name:nil attributes:@{}];
@@ -72,6 +76,10 @@
     [monitor stopActionWithType:DDRUMActionTypeSwipe name:nil attributes:@{}];
     [monitor addActionWithType:DDRUMActionTypeTap name:@"" attributes:@{}];
     [monitor addAttributeForKey:@"" value:@""];
+    [monitor addFeatureFlagEvaluationWithName: @"name" value: @"value"];
+
+    [monitor setDebug:YES];
+    [monitor setDebug:NO];
 }
 
 #pragma clang diagnostic pop

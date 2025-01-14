@@ -24,6 +24,7 @@ internal func randomRUMEvent() -> RUMDataModel {
 extension RUMUser: RandomMockable {
     public static func mockRandom() -> RUMUser {
         return RUMUser(
+            anonymousId: .mockRandom(),
             email: .mockRandom(),
             id: .mockRandom(),
             name: .mockRandom(),
@@ -131,9 +132,14 @@ extension RUMViewEvent: RandomMockable {
 
     /// Produces random `RUMViewEvent` with setting given fields to certain values.
     static func mockRandomWith(
+        sessionID: RUMUUID = .mockRandom(),
+        viewID: String = .mockRandom(),
+        date: Int64 = .mockRandom(),
         viewIsActive: Bool? = .random(),
         viewTimeSpent: Int64 = .mockRandom(),
-        crashCount: Int64? = nil
+        viewURL: String = .mockRandom(),
+        crashCount: Int64? = nil,
+        hasReplay: Bool? = nil
     ) -> RUMViewEvent {
         return RUMViewEvent(
             dd: .init(
@@ -154,15 +160,15 @@ extension RUMViewEvent: RandomMockable {
             connectivity: .mockRandom(),
             container: nil,
             context: .mockRandom(),
-            date: .mockRandom(),
+            date: date,
             device: .mockRandom(),
             display: nil,
             os: .mockRandom(),
             privacy: nil,
             service: .mockRandom(),
             session: .init(
-                hasReplay: nil,
-                id: .mockRandom(),
+                hasReplay: hasReplay,
+                id: sessionID.toRUMDataFormat,
                 isActive: true,
                 sampledForReplay: nil,
                 type: .user
@@ -178,6 +184,7 @@ extension RUMViewEvent: RandomMockable {
                 crash: crashCount.map { .init(count: $0) },
                 cumulativeLayoutShift: .mockRandom(),
                 cumulativeLayoutShiftTargetSelector: nil,
+                cumulativeLayoutShiftTime: .mockRandom(),
                 customTimings: .mockAny(),
                 domComplete: .mockRandom(),
                 domContentLoaded: .mockRandom(),
@@ -192,7 +199,7 @@ extension RUMViewEvent: RandomMockable {
                 flutterRasterTime: nil,
                 frozenFrame: .init(count: .mockRandom()),
                 frustration: nil,
-                id: .mockRandom(),
+                id: viewID,
                 inForegroundPeriods: [
                     .init(
                         duration: .mockRandom(),
@@ -201,6 +208,8 @@ extension RUMViewEvent: RandomMockable {
                 ],
                 interactionToNextPaint: nil,
                 interactionToNextPaintTargetSelector: nil,
+                interactionToNextPaintTime: .mockRandom(),
+                interactionToNextViewTime: nil,
                 isActive: viewIsActive,
                 isSlowRendered: .mockRandom(),
                 jsRefreshRate: nil,
@@ -213,12 +222,13 @@ extension RUMViewEvent: RandomMockable {
                 memoryAverage: .mockRandom(),
                 memoryMax: .mockRandom(),
                 name: .mockRandom(),
+                networkSettledTime: nil,
                 referrer: .mockRandom(),
                 refreshRateAverage: .mockRandom(),
                 refreshRateMin: .mockRandom(),
                 resource: .init(count: .mockRandom()),
                 timeSpent: viewTimeSpent,
-                url: .mockRandom()
+                url: viewURL
             )
         )
     }
@@ -259,23 +269,30 @@ extension RUMResourceEvent: RandomMockable {
             os: .mockRandom(),
             resource: .init(
                 connect: .init(duration: .mockRandom(), start: .mockRandom()),
+                decodedBodySize: nil,
+                deliveryType: nil,
                 dns: .init(duration: .mockRandom(), start: .mockRandom()),
                 download: .init(duration: .mockRandom(), start: .mockRandom()),
                 duration: .mockRandom(),
+                encodedBodySize: nil,
                 firstByte: .init(duration: .mockRandom(), start: .mockRandom()),
                 id: .mockRandom(),
                 method: .mockRandom(),
+                protocol: nil,
                 provider: .init(
                     domain: .mockRandom(),
                     name: .mockRandom(),
                     type: Bool.random() ? .firstParty : nil
                 ),
                 redirect: .init(duration: .mockRandom(), start: .mockRandom()),
+                renderBlockingStatus: nil,
                 size: .mockRandom(),
                 ssl: .init(duration: .mockRandom(), start: .mockRandom()),
                 statusCode: .mockRandom(),
+                transferSize: nil,
                 type: [.native, .image].randomElement()!,
-                url: .mockRandom()
+                url: .mockRandom(),
+                worker: nil
             ),
             service: .mockRandom(),
             session: .init(
@@ -400,6 +417,7 @@ extension RUMErrorEvent: RandomMockable {
             error: .init(
                 binaryImages: nil,
                 category: nil,
+                csp: nil,
                 handling: nil,
                 handlingStack: nil,
                 id: .mockRandom(),
@@ -420,6 +438,7 @@ extension RUMErrorEvent: RandomMockable {
                 sourceType: .mockRandom(),
                 stack: .mockRandom(),
                 threads: nil,
+                timeSinceAppStart: nil,
                 type: .mockRandom(),
                 wasTruncated: .mockRandom()
             ),
@@ -474,7 +493,18 @@ extension RUMLongTaskEvent: RandomMockable {
             date: .mockRandom(),
             device: .mockRandom(),
             display: nil,
-            longTask: .init(duration: .mockRandom(), id: .mockRandom(), isFrozenFrame: .mockRandom()),
+            longTask: .init(
+                blockingDuration: nil,
+                duration: .mockRandom(),
+                entryType: nil,
+                firstUiEventTimestamp: nil,
+                id: nil,
+                isFrozenFrame: .mockRandom(),
+                renderStart: .mockRandom(),
+                scripts: nil,
+                startTime: nil,
+                styleAndLayoutStart: nil
+            ),
             os: .mockRandom(),
             service: .mockRandom(),
             session: .init(
@@ -498,6 +528,7 @@ extension TelemetryConfigurationEvent: RandomMockable {
             action: .init(id: .mockRandom()),
             application: .init(id: .mockRandom()),
             date: .mockRandom(),
+            effectiveSampleRate: .mockRandom(),
             experimentalFeatures: nil,
             service: .mockRandom(),
             session: .init(id: .mockRandom()),
@@ -512,11 +543,14 @@ extension TelemetryConfigurationEvent: RandomMockable {
                     batchProcessingLevel: .mockRandom(),
                     batchSize: .mockAny(),
                     batchUploadFrequency: .mockRandom(),
+                    collectFeatureFlagsOn: nil,
+                    compressIntakeRequests: nil,
                     defaultPrivacyLevel: .mockRandom(),
                     forwardConsoleLogs: nil,
                     forwardErrorsToLogs: nil,
                     forwardReports: nil,
                     initializationType: nil,
+                    isMainProcess: nil,
                     mobileVitalsUpdatePeriod: .mockRandom(),
                     premiumSampleRate: nil,
                     reactNativeVersion: nil,
@@ -529,6 +563,7 @@ extension TelemetryConfigurationEvent: RandomMockable {
                     storeContextsAcrossPages: nil,
                     telemetryConfigurationSampleRate: .mockRandom(),
                     telemetrySampleRate: .mockRandom(),
+                    telemetryUsageSampleRate: nil,
                     traceSampleRate: .mockRandom(),
                     trackBackgroundEvents: .mockRandom(),
                     trackCrossPlatformLongTasks: .mockRandom(),
@@ -544,6 +579,7 @@ extension TelemetryConfigurationEvent: RandomMockable {
                     trackResources: .mockRandom(),
                     trackSessionAcrossSubdomains: nil,
                     trackViewsManually: nil,
+                    trackingConsent: nil,
                     useAllowedTracingOrigins: .mockRandom(),
                     useAllowedTracingUrls: nil,
                     useBeforeSend: nil,
@@ -557,10 +593,33 @@ extension TelemetryConfigurationEvent: RandomMockable {
                     useTracing: .mockRandom(),
                     useWorkerUrl: nil,
                     viewTrackingStrategy: nil
-                )
+                ),
+                device: .mockRandom(),
+                os: .mockRandom(),
+                telemetryInfo: [:]
             ),
             version: .mockAny(),
             view: .init(id: .mockRandom())
+        )
+    }
+}
+
+extension RUMTelemetryDevice: RandomMockable {
+    public static func mockRandom() -> RUMTelemetryDevice {
+        return RUMTelemetryDevice(
+            architecture: .mockRandom(),
+            brand: .mockRandom(),
+            model: .mockRandom()
+        )
+    }
+}
+
+extension RUMTelemetryOperatingSystem: RandomMockable {
+    public static func mockRandom() -> RUMTelemetryOperatingSystem {
+        return RUMTelemetryOperatingSystem(
+            build: .mockRandom(),
+            name: .mockRandom(),
+            version: .mockRandom()
         )
     }
 }

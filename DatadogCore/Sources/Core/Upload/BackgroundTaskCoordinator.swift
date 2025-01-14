@@ -20,15 +20,25 @@ internal protocol BackgroundTaskCoordinator {
 import UIKit
 import DatadogInternal
 
-/// Bridge protocol that matches `UIApplication` interface for background tasks. Allows easier testablity.
+#if !os(watchOS)
+/// Bridge protocol that calls corresponding `UIApplication` interface for background tasks. Allows easier testablity.
 internal protocol UIKitAppBackgroundTaskCoordinator {
-    func beginBackgroundTask(expirationHandler handler: (() -> Void)?) -> UIBackgroundTaskIdentifier
-    func endBackgroundTask(_ identifier: UIBackgroundTaskIdentifier)
+    func beginBgTask(_ handler: (() -> Void)?) -> UIBackgroundTaskIdentifier
+    func endBgTask(_ identifier: UIBackgroundTaskIdentifier)
 }
 
-extension UIApplication: UIKitAppBackgroundTaskCoordinator {}
+extension UIApplication: UIKitAppBackgroundTaskCoordinator {
+    func beginBgTask(_ handler: (() -> Void)?) -> UIBackgroundTaskIdentifier {
+        return beginBackgroundTask {
+            handler?()
+        }
+    }
+    func endBgTask(_ identifier: UIBackgroundTaskIdentifier) {
+        endBackgroundTask(identifier)
+    }
+}
 
-internal class UIKitBackgroundTaskCoordinator: BackgroundTaskCoordinator {
+internal class AppBackgroundTaskCoordinator: BackgroundTaskCoordinator {
     private let app: UIKitAppBackgroundTaskCoordinator?
 
     @ReadWriteLock
@@ -42,7 +52,7 @@ internal class UIKitBackgroundTaskCoordinator: BackgroundTaskCoordinator {
 
     internal func beginBackgroundTask() {
         endBackgroundTask()
-        currentTaskId = app?.beginBackgroundTask { [weak self] in
+        currentTaskId = app?.beginBgTask { [weak self] in
             guard let self = self else {
                 return
             }
@@ -55,9 +65,44 @@ internal class UIKitBackgroundTaskCoordinator: BackgroundTaskCoordinator {
             return
         }
         if currentTaskId != .invalid {
-            app?.endBackgroundTask(currentTaskId)
+            app?.endBgTask(currentTaskId)
         }
         self.currentTaskId = nil
+    }
+}
+#endif
+
+/// Bridge protocol that matches `ProcessInfo` interface for background activity. Allows easier testablity.
+internal protocol ProcessInfoActivityCoordinator {
+    func beginActivity(options: ProcessInfo.ActivityOptions, reason: String) -> any NSObjectProtocol
+    func endActivity(_ activity: any NSObjectProtocol)
+}
+
+extension ProcessInfo: ProcessInfoActivityCoordinator {}
+
+internal class ExtensionBackgroundTaskCoordinator: BackgroundTaskCoordinator {
+    private let processInfo: ProcessInfoActivityCoordinator
+
+    @ReadWriteLock
+    private var currentActivity: NSObjectProtocol?
+
+    internal init(
+        processInfo: ProcessInfoActivityCoordinator = ProcessInfo()
+    ) {
+        self.processInfo = processInfo
+    }
+
+    internal func beginBackgroundTask() {
+        endBackgroundTask()
+        currentActivity = processInfo.beginActivity(options: [.background], reason: "Datadog SDK background upload")
+    }
+
+    internal func endBackgroundTask() {
+        guard let currentActivity = currentActivity else {
+            return
+        }
+        processInfo.endActivity(currentActivity)
+        self.currentActivity = nil
     }
 }
 #endif

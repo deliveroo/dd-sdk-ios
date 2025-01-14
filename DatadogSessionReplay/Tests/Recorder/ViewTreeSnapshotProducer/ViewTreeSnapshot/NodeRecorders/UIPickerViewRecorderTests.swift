@@ -4,12 +4,13 @@
  * Copyright 2019-Present Datadog, Inc.
  */
 
+#if os(iOS)
 import XCTest
 @_spi(Internal)
 @testable import DatadogSessionReplay
 
 class UIPickerViewRecorderTests: XCTestCase {
-    private let recorder = UIPickerViewRecorder()
+    private let recorder = UIPickerViewRecorder(identifier: UUID())
     private let picker = UIPickerView()
     private var viewAttributes: ViewAttributes = .mockAny()
 
@@ -52,3 +53,4 @@ class UIPickerViewRecorderTests: XCTestCase {
         XCTAssertNil(recorder.semantics(of: view, with: viewAttributes, in: .mockAny()))
     }
 }
+#endif

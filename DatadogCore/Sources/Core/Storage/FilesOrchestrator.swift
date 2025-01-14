@@ -15,10 +15,16 @@ internal protocol FilesOrchestratorType: AnyObject {
     func delete(readableFile: ReadableFile, deletionReason: BatchDeletedMetric.RemovalReason)
 
     var ignoreFilesAgeWhenReading: Bool { get set }
+    var trackName: String { get }
 }
 
 /// Orchestrates files in a single directory.
 internal class FilesOrchestrator: FilesOrchestratorType {
+    enum Constants {
+        /// Precision in which the timestamp is stored as part of the file name.
+        static let fileNamePrecision: TimeInterval = 0.001 // millisecond precision
+    }
+
     /// Directory where files are stored.
     let directory: Directory
     /// Date provider.
@@ -33,6 +39,9 @@ internal class FilesOrchestrator: FilesOrchestratorType {
     /// Tracks the size of last writable file by accumulating the total `writeSize:` requested in `getWritableFile(writeSize:)`
     /// This is approximated value as it assumes that all requested writes succed. The actual difference should be negligible.
     private var lastWritableFileApproximatedSize: UInt64 = 0
+    /// Tracks the last date when writtable file was requested for write operation.
+    /// It is used to compute the "batch duration" from the moment file was created to the moment it was last written.
+    private var lastWritableFileLastWriteDate: Date? = nil
     /// Telemetry interface.
     let telemetry: Telemetry
 
@@ -44,10 +53,16 @@ internal class FilesOrchestrator: FilesOrchestratorType {
         let consentLabel: String
         /// The preset for uploader performance in this feature to include in metric.
         let uploaderPerformance: UploadPerformancePreset
+        /// The present configuration of background upload in this feature to include in metric.
+        let backgroundTasksEnabled: Bool
     }
 
     /// An extra information to include in metrics or `nil` if metrics should not be reported for this orchestrator.
     let metricsData: MetricsData?
+
+    var trackName: String {
+        metricsData?.trackName ?? "Unknown"
+    }
 
     init(
         directory: Directory,
@@ -75,6 +90,7 @@ internal class FilesOrchestrator: FilesOrchestratorType {
         if let lastWritableFile = reuseLastWritableFileIfPossible(writeSize: writeSize) { // if last writable file can be reused
             lastWritableFileObjectsCount += 1
             lastWritableFileApproximatedSize += writeSize
+            lastWritableFileLastWriteDate = dateProvider.now
             return lastWritableFile
         } else {
             if let closedBatchName = lastWritableFileName {
@@ -98,12 +114,34 @@ internal class FilesOrchestrator: FilesOrchestratorType {
         // happens too often).
         try purgeFilesDirectoryIfNeeded()
 
-        let newFileName = fileNameFrom(fileCreationDate: dateProvider.now)
+        let newFileName = nextFileName()
         let newFile = try directory.createFile(named: newFileName)
         lastWritableFileName = newFile.name
         lastWritableFileObjectsCount = 1
         lastWritableFileApproximatedSize = writeSize
+        lastWritableFileLastWriteDate = dateProvider.now
         return newFile
+    }
+
+    /// Generates a unique file name based on the current time, ensuring that the generated file name does not already exist in the directory.
+    /// When a conflict is detected, it adjusts the timestamp by advancing the current time by the precision interval to ensure uniqueness.
+    ///
+    /// In practice, name conflicts are extremely unlikely due to the monotonic nature of `dateProvider.now`.
+    /// Conflicts can only occur in very specific scenarios, such as during a tracking consent change when files are moved
+    /// from an unauthorized (.pending) folder to an authorized (.granted) folder, with events being written immediately before
+    /// and after the consent change. These conflicts were observed in tests, causing flakiness. In real-device scenarios,
+    /// conflicts may occur if tracking consent is changed and two events are written within the precision window defined
+    /// by `Constants.fileNamePrecision` (1 millisecond).
+    private func nextFileName() -> String {
+        var newFileName = fileNameFrom(fileCreationDate: dateProvider.now)
+        while directory.hasFile(named: newFileName) {
+            // Advance the timestamp by the precision interval to avoid generating the same file name.
+            // This may result in generating file names "in the future", but we aren't concerned
+            // about this given how rare this scenario is.
+            let newDate = dateProvider.now.addingTimeInterval(Constants.fileNamePrecision)
+            newFileName = fileNameFrom(fileCreationDate: newDate)
+        }
+        return newFileName
     }
 
     private func reuseLastWritableFileIfPossible(writeSize: UInt64) -> WritableFile? {
@@ -187,7 +225,7 @@ internal class FilesOrchestrator: FilesOrchestratorType {
         let accumulatedFilesSize = filesWithSizeSortedByCreationDate.map { $0.size }.reduce(0, +)
 
         if accumulatedFilesSize > performance.maxDirectorySize {
-            let sizeToFree = accumulatedFilesSize - performance.maxDirectorySize
+            let sizeToFree = accumulatedFilesSize - performance.maxDirectorySize.asUInt64()
             var sizeFreed: UInt64 = 0
 
             while sizeFreed < sizeToFree && !filesWithSizeSortedByCreationDate.isEmpty {
@@ -229,7 +267,7 @@ internal class FilesOrchestrator: FilesOrchestratorType {
         telemetry.metric(
             name: BatchDeletedMetric.name,
             attributes: [
-                BasicMetric.typeKey: BatchDeletedMetric.typeValue,
+                SDKMetricFields.typeKey: BatchDeletedMetric.typeValue,
                 BatchMetric.trackKey: metricsData.trackName,
                 BatchDeletedMetric.uploaderDelayKey: [
                     BatchDeletedMetric.uploaderDelayMinKey: metricsData.uploaderPerformance.minUploadDelay.toMilliseconds,
@@ -239,8 +277,10 @@ internal class FilesOrchestrator: FilesOrchestratorType {
                 BatchDeletedMetric.uploaderWindowKey: performance.uploaderWindow.toMilliseconds,
                 BatchDeletedMetric.batchAgeKey: batchAge.toMilliseconds,
                 BatchDeletedMetric.batchRemovalReasonKey: deletionReason.toString(),
-                BatchDeletedMetric.inBackgroundKey: false
-            ]
+                BatchDeletedMetric.inBackgroundKey: false,
+                BatchDeletedMetric.backgroundTasksEnabled: metricsData.backgroundTasksEnabled
+            ],
+            sampleRate: BatchDeletedMetric.sampleRate
         )
     }
 
@@ -251,20 +291,23 @@ internal class FilesOrchestrator: FilesOrchestratorType {
         guard let metricsData = metricsData else {
             return // do not track metrics for this orchestrator
         }
-
-        let batchDuration = dateProvider.now.timeIntervalSince(fileCreationDateFrom(fileName: fileName))
+        guard let lastWriteDate = lastWritableFileLastWriteDate else {
+            return // not reachable
+        }
+        let batchDuration = lastWriteDate.timeIntervalSince(fileCreationDateFrom(fileName: fileName))
 
         telemetry.metric(
             name: BatchClosedMetric.name,
             attributes: [
-                BasicMetric.typeKey: BatchClosedMetric.typeValue,
+                SDKMetricFields.typeKey: BatchClosedMetric.typeValue,
                 BatchMetric.trackKey: metricsData.trackName,
                 BatchMetric.consentKey: metricsData.consentLabel,
                 BatchClosedMetric.uploaderWindowKey: performance.uploaderWindow.toMilliseconds,
                 BatchClosedMetric.batchSizeKey: lastWritableFileApproximatedSize,
                 BatchClosedMetric.batchEventsCountKey: lastWritableFileObjectsCount,
                 BatchClosedMetric.batchDurationKey: batchDuration.toMilliseconds
-            ]
+            ],
+            sampleRate: BatchClosedMetric.sampleRate
         )
     }
 }
@@ -272,7 +315,7 @@ internal class FilesOrchestrator: FilesOrchestratorType {
 /// File creation date is used as file name - timestamp in milliseconds is used for date representation.
 /// This function converts file creation date into file name.
 internal func fileNameFrom(fileCreationDate: Date) -> String {
-    let milliseconds = fileCreationDate.timeIntervalSinceReferenceDate * 1_000
+    let milliseconds = fileCreationDate.timeIntervalSinceReferenceDate / FilesOrchestrator.Constants.fileNamePrecision
     let converted = (try? UInt64(withReportingOverflow: milliseconds)) ?? 0
     return String(converted)
 }
@@ -280,6 +323,6 @@ internal func fileNameFrom(fileCreationDate: Date) -> String {
 /// File creation date is used as file name - timestamp in milliseconds is used for date representation.
 /// This function converts file name into file creation date.
 internal func fileCreationDateFrom(fileName: String) -> Date {
-    let millisecondsSinceReferenceDate = TimeInterval(UInt64(fileName) ?? 0) / 1_000
+    let millisecondsSinceReferenceDate = TimeInterval(UInt64(fileName) ?? 0) * FilesOrchestrator.Constants.fileNamePrecision
     return Date(timeIntervalSinceReferenceDate: TimeInterval(millisecondsSinceReferenceDate))
 }

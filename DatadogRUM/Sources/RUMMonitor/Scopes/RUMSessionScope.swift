@@ -53,10 +53,12 @@ internal class RUMSessionScope: RUMScope, RUMContextProvider {
     // MARK: - Initialization
 
     unowned let parent: RUMContextProvider
-    private let dependencies: RUMScopeDependencies
+
+    /// Container bundling dependencies for this scope.
+    let dependencies: RUMScopeDependencies
 
     /// Automatically detect background events by creating "Background" view if no other view is active
-    internal let trackBackgroundEvents: Bool
+    let trackBackgroundEvents: Bool
 
     /// This Session UUID. Equals `.nullUUID` if the Session is sampled.
     let sessionUUID: RUMUUID
@@ -81,8 +83,8 @@ internal class RUMSessionScope: RUMScope, RUMContextProvider {
         parent: RUMContextProvider,
         startTime: Date,
         startPrecondition: RUMSessionPrecondition?,
+        context: DatadogContext,
         dependencies: RUMScopeDependencies,
-        hasReplay: Bool?,
         resumingViewScope: RUMViewScope? = nil
     ) {
         self.parent = parent
@@ -99,7 +101,15 @@ internal class RUMSessionScope: RUMScope, RUMContextProvider {
             sessionUUID: sessionUUID.rawValue,
             isInitialSession: isInitialSession,
             hasTrackedAnyView: false,
-            didStartWithReplay: hasReplay
+            didStartWithReplay: context.hasReplay
+        )
+
+        // Start tracking "RUM Session Ended" metric for this session
+        dependencies.sessionEndedMetric.startMetric(
+            sessionID: sessionUUID,
+            precondition: startPrecondition,
+            context: context,
+            tracksBackgroundEvents: trackBackgroundEvents
         )
 
         if let viewScope = resumingViewScope {
@@ -109,21 +119,15 @@ internal class RUMSessionScope: RUMScope, RUMContextProvider {
                 identity: viewScope.identity,
                 path: viewScope.viewPath,
                 name: viewScope.viewName,
-                attributes: viewScope.attributes,
                 customTimings: [:],
                 startTime: startTime,
                 serverTimeOffset: viewScope.serverTimeOffset,
-                hasReplay: hasReplay
+                hasReplay: context.hasReplay
             )
         }
 
         // Update fatal error context with recent RUM session state:
         dependencies.fatalErrorContext.sessionState = state
-
-        // Notify Synthetics if needed
-        if dependencies.syntheticsTest != nil && sessionUUID != .nullUUID {
-            print("_dd.session.id=" + sessionUUID.toRUMDataFormat)
-        }
     }
 
     /// Creates a new Session upon expiration of the previous one.
@@ -138,8 +142,8 @@ internal class RUMSessionScope: RUMScope, RUMContextProvider {
             parent: expiredSession.parent,
             startTime: startTime,
             startPrecondition: startPrecondition,
-            dependencies: expiredSession.dependencies,
-            hasReplay: context.hasReplay
+            context: context,
+            dependencies: expiredSession.dependencies
         )
 
         // Transfer active Views by creating new `RUMViewScopes` for their identity objects:
@@ -151,7 +155,6 @@ internal class RUMSessionScope: RUMScope, RUMContextProvider {
                 identity: expiredView.identity,
                 path: expiredView.viewPath,
                 name: expiredView.viewName,
-                attributes: expiredView.attributes,
                 customTimings: expiredView.customTimings,
                 startTime: startTime,
                 serverTimeOffset: context.serverTimeOffset
@@ -186,7 +189,7 @@ internal class RUMSessionScope: RUMScope, RUMContextProvider {
         }
 
         if !isSampled {
-            // Make sure sessions end even if they are sampled
+            // Make sure sessions end even if they are not sampled
             if command is RUMStopSessionCommand {
                 endReason = .stopAPI
                 return false // end this session (no longer keep the session scope)
@@ -198,6 +201,7 @@ internal class RUMSessionScope: RUMScope, RUMContextProvider {
         var deactivating = false
         if isActive {
             if command is RUMStopSessionCommand {
+                dependencies.sessionEndedMetric.trackWasStopped(sessionID: self.context.sessionID)
                 endReason = .stopAPI
                 deactivating = true
             } else if let startApplicationCommand = command as? RUMApplicationStartCommand {
@@ -222,6 +226,16 @@ internal class RUMSessionScope: RUMScope, RUMContextProvider {
             dependencies.fatalErrorContext.view = nil
         }
 
+        if let command = command as? RUMAddViewLoadingTime {
+            if viewScopes.isEmpty {
+                DD.logger.warn("No view found to add the loading time.")
+                dependencies.telemetry.send(telemetry: .usage(.init(event: .addViewLoadingTime(.init(noActiveView: false, noView: true, overwritten: command.overwrite)))))
+            } else if !hasActiveView {
+                DD.logger.warn("No active view found to add the loading time.")
+                dependencies.telemetry.send(telemetry: .usage(.init(event: .addViewLoadingTime(.init(noActiveView: true, noView: false, overwritten: command.overwrite)))))
+            }
+        }
+
         return isActive || !viewScopes.isEmpty
     }
 
@@ -240,7 +254,6 @@ internal class RUMSessionScope: RUMScope, RUMContextProvider {
             identity: command.identity,
             path: command.path,
             name: command.name,
-            attributes: command.attributes,
             customTimings: [:],
             startTime: command.time,
             serverTimeOffset: context.serverTimeOffset,
@@ -254,7 +267,6 @@ internal class RUMSessionScope: RUMScope, RUMContextProvider {
         identity: ViewIdentifier,
         path: String,
         name: String,
-        attributes: [AttributeKey: AttributeValue],
         customTimings: [String: Int64],
         startTime: Date,
         serverTimeOffset: TimeInterval,
@@ -267,7 +279,6 @@ internal class RUMSessionScope: RUMScope, RUMContextProvider {
             identity: identity,
             path: path,
             name: name,
-            attributes: attributes,
             customTimings: customTimings,
             startTime: startTime,
             serverTimeOffset: serverTimeOffset
@@ -283,11 +294,6 @@ internal class RUMSessionScope: RUMScope, RUMContextProvider {
             timestamp: startTime.timeIntervalSince1970.toInt64Milliseconds,
             hasReplay: hasReplay
         )
-
-        // Notify Synthetics if needed
-        if dependencies.syntheticsTest != nil && sessionUUID != .nullUUID {
-            print("_dd.view.id=" + id)
-        }
     }
 
     private func startApplicationLaunchView(on command: RUMApplicationStartCommand, context: DatadogContext, writer: Writer) {
@@ -302,7 +308,6 @@ internal class RUMSessionScope: RUMScope, RUMContextProvider {
             identity: ViewIdentifier(RUMOffViewEventsHandlingRule.Constants.applicationLaunchViewURL),
             path: RUMOffViewEventsHandlingRule.Constants.applicationLaunchViewURL,
             name: RUMOffViewEventsHandlingRule.Constants.applicationLaunchViewName,
-            attributes: command.attributes,
             customTimings: [:],
             startTime: startTime,
             serverTimeOffset: context.serverTimeOffset,
@@ -321,17 +326,29 @@ internal class RUMSessionScope: RUMScope, RUMContextProvider {
         case .handleInBackgroundView where command.canStartBackgroundView:
             startBackgroundView(on: command, context: context)
         default:
-            if !(command is RUMKeepSessionAliveCommand) { // it is expected to receive 'keep alive' while no active view (when tracking WebView events)
+            if let missedEventType = command.missedEventType {
+                // In case there was an event missed due to no active view, track it in Session Ended metric
+                dependencies.sessionEndedMetric.track(missedEventType: missedEventType, in: sessionUUID)
+            }
+
+            if !(isSilentOffViewCommand(command: command)) {
                 // As no view scope will handle this command, warn the user on dropping it.
                 DD.logger.warn(
                 """
-                \(String(describing: command)) was detected, but no view is active. To track views automatically, try calling the
-                DatadogConfiguration.Builder.trackUIKitRUMViews() method. You can also track views manually using
-                the RumMonitor.startView() and RumMonitor.stopView() methods.
+                \(String(describing: command)) was detected, but no view is active. To track views automatically, configure
+                `RUM.Configuration.uiKitViewsPredicate` or use `.trackRUMView()` modifier in SwiftUI. You can also track views manually
+                with `RUMMonitor.shared().startView()` and `RUMMonitor.shared().stopView()`.
                 """
                 )
             }
         }
+    }
+
+    private func isSilentOffViewCommand(command: RUMCommand) -> Bool {
+        // It is expected to receive 'keep alive' while no active view (when tracking WebView events), and performance metric
+        // updates are sent automatically by cross platform frameworks whether a view is active or not, resulting in log
+        // spam.
+        return command is RUMKeepSessionAliveCommand || command is RUMUpdatePerformanceMetric
     }
 
     private func startBackgroundView(on command: RUMCommand, context: DatadogContext) {
@@ -343,7 +360,6 @@ internal class RUMSessionScope: RUMScope, RUMContextProvider {
             identity: ViewIdentifier(RUMOffViewEventsHandlingRule.Constants.backgroundViewURL),
             path: RUMOffViewEventsHandlingRule.Constants.backgroundViewURL,
             name: RUMOffViewEventsHandlingRule.Constants.backgroundViewName,
-            attributes: command.attributes,
             customTimings: [:],
             startTime: command.time,
             serverTimeOffset: context.serverTimeOffset,

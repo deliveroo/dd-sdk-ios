@@ -4,12 +4,13 @@
  * Copyright 2019-Present Datadog, Inc.
  */
 
+#if os(iOS)
 import XCTest
 @_spi(Internal)
 @testable import DatadogSessionReplay
 
 class UIStepperRecorderTests: XCTestCase {
-    private let recorder = UIStepperRecorder()
+    private let recorder = UIStepperRecorder(identifier: UUID())
     private let stepper = UIStepper()
     /// `ViewAttributes` simulating common attributes of switch's `UIView`.
     private var viewAttributes: ViewAttributes = .mockAny()
@@ -46,3 +47,4 @@ class UIStepperRecorderTests: XCTestCase {
         XCTAssertNil(recorder.semantics(of: view, with: viewAttributes, in: .mockAny()))
     }
 }
+#endif

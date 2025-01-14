@@ -330,17 +330,23 @@ class DatadogTests: XCTestCase {
         // mock data is written only after this operation completes - otherwise, migration may delete mocked files.
         core.readWriteQueue.sync {}
 
+        // Given
         let featureDirectories: [FeatureDirectories] = [
             try core.directory.getFeatureDirectories(forFeatureNamed: "logging"),
             try core.directory.getFeatureDirectories(forFeatureNamed: "tracing"),
         ]
 
-        let allDirectories: [Directory] = featureDirectories.flatMap { [$0.authorized, $0.unauthorized] }
-        try allDirectories.forEach { directory in _ = try directory.createFile(named: .mockRandom()) }
+        let scope = core.scope(for: TraceFeature.self)
+        scope.dataStore.setValue("foo".data(using: .utf8)!, forKey: "bar")
 
-        // Given
-        let numberOfFiles = try allDirectories.reduce(0, { acc, nextDirectory in return try acc + nextDirectory.files().count })
-        XCTAssertEqual(numberOfFiles, 4, "Each feature stores 2 files - one authorised and one unauthorised")
+        // Wait for async clear completion in all features:
+        core.readWriteQueue.sync {}
+        let tracingDataStoreDir = try core.directory.coreDirectory.subdirectory(path: core.directory.getDataStorePath(forFeatureNamed: "tracing"))
+        XCTAssertTrue(tracingDataStoreDir.hasFile(named: "bar"))
+
+        var allDirectories: [Directory] = featureDirectories.flatMap { [$0.authorized, $0.unauthorized] }
+        allDirectories.append(.init(url: tracingDataStoreDir.url))
+        try allDirectories.forEach { directory in _ = try directory.createFile(named: .mockRandom()) }
 
         // When
         Datadog.clearAllData()
@@ -349,8 +355,11 @@ class DatadogTests: XCTestCase {
         core.readWriteQueue.sync {}
 
         // Then
-        let newNumberOfFiles = try allDirectories.reduce(0, { acc, nextDirectory in return try acc + nextDirectory.files().count })
-        XCTAssertEqual(newNumberOfFiles, 0, "All files must be removed")
+        let files: [File] = allDirectories.reduce([], { acc, nextDirectory in
+            let next = try? nextDirectory.files()
+            return acc + (next ?? [])
+        })
+        XCTAssertEqual(files, [], "All files must be removed")
 
         Datadog.flushAndDeinitialize()
     }

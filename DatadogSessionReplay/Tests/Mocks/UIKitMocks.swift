@@ -28,7 +28,7 @@ extension UIColor: AnyMockable, RandomMockable {
 
 extension UIView: AnyMockable, RandomMockable {
     public static func mockAny() -> Self {
-        return UIView(frame: .init(x: 0, y: 0, width: 200, height: 400)) as! Self
+        return .init(frame: .init(x: 0, y: 0, width: 200, height: 400))
     }
 
     public static func mockRandom() -> Self {
@@ -46,10 +46,12 @@ extension UIView: AnyMockable, RandomMockable {
 class UITouchMock: UITouch {
     var _phase: UITouch.Phase
     var _location: CGPoint
+    var _mockedView: UIView
 
-    init(phase: UITouch.Phase = .began, location: CGPoint = .zero) {
+    init(phase: UITouch.Phase = .began, location: CGPoint = .zero, view: UIView = UIView()) {
         self._phase = phase
         self._location = location
+        self._mockedView = view
     }
 
     override var phase: UITouch.Phase {
@@ -59,6 +61,10 @@ class UITouchMock: UITouch {
 
     override func location(in view: UIView?) -> CGPoint {
         return _location
+    }
+
+    override var view: UIView {
+        return _mockedView
     }
 }
 
@@ -89,15 +95,13 @@ extension UITextContentType: RandomMockable {
             .jobTitle, .organizationName, .location, .fullStreetAddress, .streetAddressLine1,
             .streetAddressLine2, .addressCity, .addressState, .addressCityAndState, .sublocality,
             .countryName, .postalCode, .telephoneNumber, .emailAddress, .URL, .creditCardNumber,
-            .username, .password
+            .username, .password,
+            .newPassword,
+            .oneTimeCode,
         ]
 
-        if #available(iOS 15.0, *) {
+        if #available(iOS 15.0, tvOS 15.0, *) {
             all.formUnion([.shipmentTrackingNumber, .flightNumber, .dateTime])
-        }
-
-        if #available(iOS 12.0, *) {
-            all.formUnion([.newPassword, .oneTimeCode])
         }
 
         return all
@@ -118,19 +122,17 @@ extension UIImage: RandomMockable {
         let bitsPerComponent: Int = 8
         let bytesPerRow = bytesPerPixel * width
         let totalBytes = bytesPerRow * height
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
 
         var bitmapBytes = [UInt8].mockRandom(count: totalBytes)
-        let bitmapData = Data(bytes: &bitmapBytes, count: totalBytes)
 
         let bitmapContext = CGContext(
-            data: UnsafeMutableRawPointer(mutating: (bitmapData as NSData).bytes),
+            data: &bitmapBytes,
             width: width,
             height: height,
             bitsPerComponent: bitsPerComponent,
             bytesPerRow: bytesPerRow,
-            space: colorSpace,
-            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+            space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         )
         let cgImage = bitmapContext!.makeImage()!
         return UIImage(cgImage: cgImage) as! Self

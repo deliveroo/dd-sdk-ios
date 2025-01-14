@@ -7,6 +7,7 @@
 import XCTest
 import TestUtilities
 import DatadogInternal
+import OpenTelemetryApi
 
 @testable import DatadogLogs
 @testable import DatadogTrace
@@ -630,7 +631,7 @@ class LoggerTests: XCTestCase {
         try core.register(feature: logging)
 
         RUM.enable(
-            with: .mockWith { $0.sessionSampleRate = 100 },
+            with: .mockWith { $0.sessionSampleRate = .maxSampleRate },
             in: core
         )
 
@@ -875,6 +876,45 @@ class LoggerTests: XCTestCase {
         logMatchers[1].assertNoValue(forKey: "dd.span_id")
     }
 
+    func testGivenBundlingWithTraceEnabledAndOpenTelemetryTracerRegistered_whenSendingLog_itContainsActiveSpanAttributes() throws {
+        core.context = .mockAny()
+
+        Logs.enable(in: core)
+        Trace.enable(in: core)
+
+        // given
+        let logger = Logger.create(in: core)
+        OpenTelemetry.registerTracerProvider(
+            tracerProvider: OTelTracerProvider(in: core)
+        )
+
+        let tracer = OpenTelemetry
+            .instance
+            .tracerProvider
+            .get(instrumentationName: "", instrumentationVersion: nil)
+
+        // when
+        let span = tracer.spanBuilder(spanName: "span")
+            .setActive(true)
+            .startSpan()
+        logger.info("info message 1")
+        span.end()
+        logger.info("info message 2")
+
+        // then
+        let logMatchers = try core.waitAndReturnLogMatchers()
+        logMatchers[0].assertValue(
+            forKeyPath: "dd.trace_id",
+            equals: span.context.traceId.toDatadog().toString(representation: .hexadecimal)
+        )
+        logMatchers[0].assertValue(
+            forKeyPath: "dd.span_id",
+            equals: span.context.spanId.toDatadog().toString(representation: .decimal)
+        )
+        logMatchers[1].assertNoValue(forKey: "dd.trace_id")
+        logMatchers[1].assertNoValue(forKey: "dd.span_id")
+    }
+
     // MARK: - Log Dates Correction
 
     func testGivenTimeDifferenceBetweenDeviceAndServer_whenCollectingLogs_thenLogDateUsesServerTime() throws {
@@ -946,7 +986,7 @@ class LoggerTests: XCTestCase {
         )
         XCTAssertEqual(
             dd.logger.criticalLog?.error?.message,
-            "🔥 Datadog SDK usage error: `Datadog.initialize()` must be called prior to `Logger.builder.build()`."
+            "🔥 Datadog SDK usage error: `Datadog.initialize()` must be called prior to `Logger.create()`."
         )
         XCTAssertTrue(logger is NOPLogger)
     }
@@ -969,7 +1009,7 @@ class LoggerTests: XCTestCase {
         )
         XCTAssertEqual(
             dd.logger.criticalLog?.error?.message,
-            "🔥 Datadog SDK usage error: `Logger.builder.build()` produces a non-functional logger, as the logging feature is disabled."
+            "🔥 Datadog SDK usage error: `Logger.create()` produces a non-functional logger because the `Logs` feature was not enabled."
         )
         XCTAssertTrue(logger is NOPLogger)
     }

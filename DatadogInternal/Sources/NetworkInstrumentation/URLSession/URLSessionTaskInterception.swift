@@ -71,22 +71,6 @@ public class URLSessionTaskInterception {
     }
 }
 
-public struct TraceContext {
-    public let traceID: TraceID
-    public let spanID: SpanID
-    public let parentSpanID: SpanID?
-
-    public init(
-        traceID: TraceID,
-        spanID: SpanID,
-        parentSpanID: SpanID? = nil
-    ) {
-        self.traceID = traceID
-        self.spanID = spanID
-        self.parentSpanID = parentSpanID
-    }
-}
-
 public struct ResourceCompletion {
     public let httpResponse: HTTPURLResponse?
     public let error: Error?
@@ -94,30 +78,6 @@ public struct ResourceCompletion {
     public init(response: URLResponse?, error: Error?) {
         self.httpResponse = response as? HTTPURLResponse
         self.error = error
-    }
-}
-
-/// An immutable version of `URLRequest`.
-///
-/// Introduced in response to concerns raised in https://github.com/DataDog/dd-sdk-ios/issues/1638 
-/// it makes a copy of request attributes, safeguarding against potential thread safety issues arising from concurrent 
-/// mutations (see more context in https://github.com/DataDog/dd-sdk-ios/pull/1767 ).
-public struct ImmutableRequest {
-    /// The URL of the request.
-    public let url: URL?
-    /// The HTTP method of the request.
-    public let httpMethod: String?
-    /// The HTTP header fields of the request.
-    public let allHTTPHeaderFields: [String: String]?
-    /// A reference to the original `URLRequest` object provided during initialization. Direct use is discouraged
-    /// due to thread safety concerns. Instead, necessary attributes should be accessed through `ImmutableRequest` fields.
-    public let unsafeOriginal: URLRequest
-
-    public init(request: URLRequest) {
-        self.url = request.url
-        self.httpMethod = request.httpMethod
-        self.allHTTPHeaderFields = request.allHTTPHeaderFields
-        self.unsafeOriginal = request
     }
 }
 

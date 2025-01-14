@@ -86,6 +86,7 @@ public struct SRSegment: SRDataModel {
         case ios = "ios"
         case flutter = "flutter"
         case reactNative = "react-native"
+        case kotlinMultiplatform = "kotlin-multiplatform"
     }
 
     /// View properties
@@ -452,6 +453,9 @@ public struct SRWebviewWireframe: Codable, Hashable {
     /// Defines the unique ID of the wireframe. This is persistent throughout the view lifetime.
     public let id: Int64
 
+    /// Whether this webview is visible or not.
+    public let isVisible: Bool?
+
     /// The style of this wireframe.
     public let shapeStyle: SRShapeStyle?
 
@@ -475,6 +479,7 @@ public struct SRWebviewWireframe: Codable, Hashable {
         case clip = "clip"
         case height = "height"
         case id = "id"
+        case isVisible = "isVisible"
         case shapeStyle = "shapeStyle"
         case slotId = "slotId"
         case type = "type"
@@ -970,6 +975,9 @@ public struct SRIncrementalSnapshotRecord: Codable {
                     /// Defines the unique ID of the wireframe. This is persistent throughout the view lifetime.
                     public let id: Int64
 
+                    /// Whether this webview is visible or not.
+                    public let isVisible: Bool?
+
                     /// The style of this wireframe.
                     public let shapeStyle: SRShapeStyle?
 
@@ -993,6 +1001,7 @@ public struct SRIncrementalSnapshotRecord: Codable {
                         case clip = "clip"
                         case height = "height"
                         case id = "id"
+                        case isVisible = "isVisible"
                         case shapeStyle = "shapeStyle"
                         case slotId = "slotId"
                         case type = "type"
@@ -1322,4 +1331,4 @@ public enum SRRecord: Codable {
     }
 }
 #endif
-// Generated from https://github.com/DataDog/rum-events-format/tree/c3747b3facf75e51cbad4c32f77ec3894f5a7249
+// Generated from https://github.com/DataDog/rum-events-format/tree/e1c6dde3793714453b5b49f17790a24e9ff9b77b

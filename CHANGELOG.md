@@ -1,12 +1,123 @@
 # Unreleased
 
+- [FIX] Fix SwiftUI placeholder in Session Replay when Feature Flag is disabled. See [#2170][]
+
+# 2.22.0 / 02-01-2025
+
+- [IMPROVEMENT] Add Datadog Configuration `backgroundTasksEnabled` ObjC API. See [#2148][]
+- [FIX] Prevent Session Replay to create two full snapshots in a row. See [#2154][]
+
+# 2.21.0 / 11-12-2024
+
+- [FIX] Fix sporadic file overwrite during consent change, ensuring event data integrity. See [#2113][]
+- [FIX] Fix trace inconsistency when using `URLSessionInterceptor` or Alamofire extension. See [#2114][]
+- [IMPROVEMENT] Add Session Replay `startRecordingImmediately` ObjC API. See [#2120][]
+- [IMPROVEMENT] Expose Crash Reporter Plugin Publicly. See [#2116][] (Thanks [@naftaly][]) [#2126][]
+
+# 2.20.0 / 14-11-2024
+
+- [FIX] Fix race condition during consent change, preventing loss of events recorded on the current thread. See [#2063][]
+- [IMPROVEMENT] Support mutation of events' attributes. See [#2099][]
+- [IMPROVEMENT] Add 'os' and 'device' info to Span events. See [#2104][]
+- [FIX] Fix bug in SR that was enforcing full snapshot more often than needed. See [#2092][]
+
+# 2.19.0 / 28-10-2024
+
+- [FEATURE] Add Privacy Overrides in Session Replay. See [#2088][]
+- [IMPROVEMENT] Add ObjC API for the internal logging/telemetry. See [#2073][]
+- [IMPROVEMENT] Support `clipsToBounds` in Session Replay. See [#2083][]
+
+# 2.18.0 / 25-09-2024
+- [IMPROVEMENT] Add overwrite required (breaking) param to addViewLoadingTime & usage telemetry. See [#2040][]
+- [FEATURE] Prevent "show password" features from revealing sensitive texts in Session Replay. See [#2050][]
+- [FEATURE] Add Fine-Grained Masking configuration options to Session Replay. See [#2043][]
+
+# 2.17.0 / 11-09-2024
+
+- [FEATURE] Add support for view loading experimental API (addViewLoadingTime). See [#2026][]
+- [IMPROVEMENT] Drop support for deprecated cocoapod specs. See [#1998][]
+- [FIX] Propagate global Tracer tags to OpenTelemetry span attributes. See [#2000][]
+- [FEATURE] Add Logs event mapper to ObjC API. See [#2008][]
+- [IMPROVEMENT] Send retry information with network requests (eg. retry_count, last_failure_status and idempotency key). See [#1991][]
+- [IMPROVEMENT] Enable app launch time on mac, macCatalyst and visionOS. See [#1888][] (Thanks [@Hengyu][])
+- [FIX] Ignore network reachability on watchOS . See [#2005][] (Thanks [@jfiser-paylocity][])
+- [FEATURE] Add Start / Stop API to Session Replay (start/stopRecording). See [#1986][]
+
+# 2.16.0 / 20-08-2024
+
+- [IMPROVEMENT] Deprecate Alamofire extension pod. See [#1966][]
+- [FIX] Refresh rate vital for variable refresh rate displays when over performing. See [#1973][]
+- [FIX] Alamofire extension types are deprecated now. See [#1988][]
+
+# 2.14.2 / 26-07-2024
+
+- [FIX] Fix CPU spikes when Watchdog Terminations tracking is enabled. See #1968
+- [FIX] Fix CPU spike when recording UITabBar using SessionReplay. See #1967
+
+# 2.15.0 / 25-07-2024
+
+- [FEATURE] Enable DatadogCore, DatadogLogs and DatadogTrace to compile on watchOS platform. See [#1918][] (Thanks [@jfiser-paylocity][]) [#1946][]
+- [IMPROVEMENT] Ability to clear feature data storage using `clearAllData` API. See [#1940][]
+- [IMPROVEMENT] Send memory warning as RUM error. See [#1955][]
+- [IMPROVEMENT] Decorate network span kind as `client`. See [#1963][]
+- [FIX] Fix CPU spikes when Watchdog Terminations tracking is enabled. See [#1968][]
+- [FIX] Fix CPU spike when recording UITabBar using SessionReplay. See [#1967][]
+
+# 2.14.1 / 09-07-2024
+
+- [FIX] Objc attributes interop for KMP. See [#1947][]
+- [FIX] Inject backtrace reporter into Logs feature. See [#1948][]
+
+# 2.14.0 / 04-07-2024
+
+- [IMPROVEMENT] Use `#fileID` over `#filePath` as the default argument in errors. See [#1938][]
+- [FEATURE] Add support for Watchdog Terminations tracking in RUM. See [#1917][] [#1911][] [#1912][] [#1889][]
+- [IMPROVEMENT] Tabbar Icon Default Tint Color in Session Replay. See [#1906][]
+- [IMPROVEMENT] Improve Nav Bar Support in Session Replay. See [#1916][]
+- [IMPROVEMENT] Record Activity Indicator in Session Replay. See [#1934][]
+- [IMPROVEMENT] Allow disabling app hang monitoring in ObjC API. See [#1908][]
+- [IMPROVEMENT] Update RUM and Telemetry models with KMP source. See [#1925][]
+- [IMPROVEMENT] Use otel-swift fork that only has APIs. See [#1930][]
+
+# 2.11.1 / 01-07-2024
+
+- [FIX] Fix compilation issues on Xcode 16 beta. See [#1898][]
+
+# 2.13.0 / 13-06-2024
+
+- [IMPROVEMENT] Bump `IPHONEOS_DEPLOYMENT_TARGET` and `TVOS_DEPLOYMENT_TARGET` from 11 to 12. See [#1891][]
+- [IMPROVEMENT] Add `.connect`, `.trace`, `.options` values to `DDRUMMethod` type. See [#1886][]
+- [FIX] Fix compilation issues on Xcode 16 beta. See [#1898][]
+
+# 2.12.0 / 03-06-2024
+
+- [IMPROVEMENT] Crash errors now include up-to-date global RUM attributes. See [#1834][]
+- [FEATURE] `DatadogTrace` now supports OpenTelemetry. See [#1828][]
+- [FIX] Fix crash on accessing request.allHTTPHeaderFields. See [#1843][]
+- [FEATURE] Support for trace context injection configuration to allow selective injection. See [#1835][]
+- [FEATURE] `DatadogWebViewTracking` is now available for Obj-C. See [#1854][]
+- [FEATURE] RUM "stop session", "get session ID" and "evaluate feature flag" APIs are now available for Obj-C. See [#1853][]
+
+# 2.11.0 / 08-05-2024
+
+- [FEATURE] `DatadogTrace` now supports head-based sampling. See [#1794][]
+- [FEATURE] Support WebView recording in Session Replay. See [#1776][]
+- [IMPROVEMENT] Add `isInitialized` and `stopInstance` methods to ObjC API. See [#1800][]
+- [IMPROVEMENT] Add `addUserExtraInfo` method to ObjC API. See [#1799][]
+- [FIX] Add background upload capability to extensions. See [#1803][]
+- [IMPROVEMENT] Start sending data immediately after SDK is initialized. See [#1798][]
+- [IMPROVEMENT] Make the SDK compile on macOS 12+. See [#1711][]
+
+# 2.10.1 / 02-05-2024
+
+- [FIX] Use trace and span id as decimal. See [#1807][]
+
 # 2.10.0 / 23-04-2024
 
 - [IMPROVEMENT] Add image duplicate detection between sessions. See [#1747][]
 - [FEATURE] Add support for 128 bit trace IDs. See [#1721][]
 - [FEATURE] Fatal App Hangs are tracked in RUM. See [#1763][]
 - [FIX] Avoid name collision with Required Reason APIs. See [#1774][]
-- [IMPROVEMENT] Make the SDK compile on macOS 12+. See [#1711][]
 
 # 2.9.0 / 11-04-2024
 
@@ -631,16 +742,79 @@ Release `2.0` introduces breaking changes. Follow the [Migration Guide](MIGRATIO
 [#1697]: https://github.com/DataDog/dd-sdk-ios/pull/1697
 [#1707]: https://github.com/DataDog/dd-sdk-ios/pull/1707
 [#1711]: https://github.com/DataDog/dd-sdk-ios/pull/1711
+[#1721]: https://github.com/DataDog/dd-sdk-ios/pull/1721
 [#1722]: https://github.com/DataDog/dd-sdk-ios/pull/1722
 [#1724]: https://github.com/DataDog/dd-sdk-ios/pull/1724
 [#1741]: https://github.com/DataDog/dd-sdk-ios/pull/1741
 [#1742]: https://github.com/DataDog/dd-sdk-ios/pull/1742
 [#1746]: https://github.com/DataDog/dd-sdk-ios/pull/1746
+[#1747]: https://github.com/DataDog/dd-sdk-ios/pull/1747
+[#1794]: https://github.com/DataDog/dd-sdk-ios/pull/1794
 [#1774]: https://github.com/DataDog/dd-sdk-ios/pull/1774
 [#1763]: https://github.com/DataDog/dd-sdk-ios/pull/1763
 [#1767]: https://github.com/DataDog/dd-sdk-ios/pull/1767
+[#1843]: https://github.com/DataDog/dd-sdk-ios/pull/1843
+[#1798]: https://github.com/DataDog/dd-sdk-ios/pull/1798
+[#1891]: https://github.com/DataDog/dd-sdk-ios/pull/1891
+[#1776]: https://github.com/DataDog/dd-sdk-ios/pull/1776
+[#1834]: https://github.com/DataDog/dd-sdk-ios/pull/1834
 [#1721]: https://github.com/DataDog/dd-sdk-ios/pull/1721
-[#1747]: https://github.com/DataDog/dd-sdk-ios/pull/1747
+[#1803]: https://github.com/DataDog/dd-sdk-ios/pull/1803
+[#1853]: https://github.com/DataDog/dd-sdk-ios/pull/1853
+[#1807]: https://github.com/DataDog/dd-sdk-ios/pull/1807
+[#1854]: https://github.com/DataDog/dd-sdk-ios/pull/1854
+[#1828]: https://github.com/DataDog/dd-sdk-ios/pull/1828
+[#1835]: https://github.com/DataDog/dd-sdk-ios/pull/1835
+[#1886]: https://github.com/DataDog/dd-sdk-ios/pull/1886
+[#1889]: https://github.com/DataDog/dd-sdk-ios/pull/1889
+[#1898]: https://github.com/DataDog/dd-sdk-ios/pull/1898
+[#1906]: https://github.com/DataDog/dd-sdk-ios/pull/1906
+[#1908]: https://github.com/DataDog/dd-sdk-ios/pull/1908
+[#1911]: https://github.com/DataDog/dd-sdk-ios/pull/1911
+[#1912]: https://github.com/DataDog/dd-sdk-ios/pull/1912
+[#1916]: https://github.com/DataDog/dd-sdk-ios/pull/1916
+[#1917]: https://github.com/DataDog/dd-sdk-ios/pull/1917
+[#1925]: https://github.com/DataDog/dd-sdk-ios/pull/1925
+[#1930]: https://github.com/DataDog/dd-sdk-ios/pull/1930
+[#1918]: https://github.com/DataDog/dd-sdk-ios/pull/1918
+[#1946]: https://github.com/DataDog/dd-sdk-ios/pull/1946
+[#1934]: https://github.com/DataDog/dd-sdk-ios/pull/1934
+[#1938]: https://github.com/DataDog/dd-sdk-ios/pull/1938
+[#1947]: https://github.com/DataDog/dd-sdk-ios/pull/1947
+[#1948]: https://github.com/DataDog/dd-sdk-ios/pull/1948
+[#1940]: https://github.com/DataDog/dd-sdk-ios/pull/1940
+[#1955]: https://github.com/DataDog/dd-sdk-ios/pull/1955
+[#1963]: https://github.com/DataDog/dd-sdk-ios/pull/1963
+[#1968]: https://github.com/DataDog/dd-sdk-ios/pull/1968
+[#1967]: https://github.com/DataDog/dd-sdk-ios/pull/1967
+[#1973]: https://github.com/DataDog/dd-sdk-ios/pull/1973
+[#1988]: https://github.com/DataDog/dd-sdk-ios/pull/1988
+[#2000]: https://github.com/DataDog/dd-sdk-ios/pull/2000
+[#1991]: https://github.com/DataDog/dd-sdk-ios/pull/1991
+[#1986]: https://github.com/DataDog/dd-sdk-ios/pull/1986
+[#1888]: https://github.com/DataDog/dd-sdk-ios/pull/1888
+[#2008]: https://github.com/DataDog/dd-sdk-ios/pull/2008
+[#2005]: https://github.com/DataDog/dd-sdk-ios/pull/2005
+[#1998]: https://github.com/DataDog/dd-sdk-ios/pull/1998
+[#1966]: https://github.com/DataDog/dd-sdk-ios/pull/1966
+[#2026]: https://github.com/DataDog/dd-sdk-ios/pull/2026
+[#2043]: https://github.com/DataDog/dd-sdk-ios/pull/2043
+[#2040]: https://github.com/DataDog/dd-sdk-ios/pull/2040
+[#2050]: https://github.com/DataDog/dd-sdk-ios/pull/2050
+[#2073]: https://github.com/DataDog/dd-sdk-ios/pull/2073
+[#2088]: https://github.com/DataDog/dd-sdk-ios/pull/2088
+[#2083]: https://github.com/DataDog/dd-sdk-ios/pull/2083
+[#2104]: https://github.com/DataDog/dd-sdk-ios/pull/2104
+[#2099]: https://github.com/DataDog/dd-sdk-ios/pull/2099
+[#2063]: https://github.com/DataDog/dd-sdk-ios/pull/2063
+[#2092]: https://github.com/DataDog/dd-sdk-ios/pull/2092
+[#2113]: https://github.com/DataDog/dd-sdk-ios/pull/2113
+[#2114]: https://github.com/DataDog/dd-sdk-ios/pull/2114
+[#2116]: https://github.com/DataDog/dd-sdk-ios/pull/2116
+[#2120]: https://github.com/DataDog/dd-sdk-ios/pull/2120
+[#2126]: https://github.com/DataDog/dd-sdk-ios/pull/2126
+[#2148]: https://github.com/DataDog/dd-sdk-ios/pull/2148
+[#2154]: https://github.com/DataDog/dd-sdk-ios/pull/2154
 [@00fa9a]: https://github.com/00FA9A
 [@britton-earnin]: https://github.com/Britton-Earnin
 [@hengyu]: https://github.com/Hengyu
@@ -671,3 +845,6 @@ Release `2.0` introduces breaking changes. Follow the [Migration Guide](MIGRATIO
 [@cltnschlosser]: https://github.com/cltnschlosser
 [@alexfanatics]: https://github.com/alexfanatics
 [@changm4n]: https://github.com/changm4n
+[@jfiser-paylocity]: https://github.com/jfiser-paylocity
+[@Hengyu]: https://github.com/Hengyu
+[@naftaly]: https://github.com/naftaly

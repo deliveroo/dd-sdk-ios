@@ -5,6 +5,7 @@
  */
 
 import Foundation
+import DatadogInternal
 
 /// Reduces `DDSpan` tags and log attributes by extracting values that require separate handling.
 ///
@@ -26,6 +27,10 @@ internal struct SpanTagsReducer {
     let extractedIsError: Bool?
     /// Resource name requiring a special encoding in `Span` JSON.
     let extractedResourceName: String?
+    /// Extracted operation name from operation tag.
+    let extractedOperationName: String?
+    /// Extracted service name from service tag.
+    let extractedServiceName: String?
 
     // MARK: - Initialization
 
@@ -34,6 +39,8 @@ internal struct SpanTagsReducer {
 
         var extractedIsError: Bool? = nil
         var extractedResourceName: String? = nil
+        var extractedOperationName: String? = nil
+        var extractedServiceName: String? = nil
 
         // extract error from `logFields`
         for fields in logFields {
@@ -55,12 +62,22 @@ internal struct SpanTagsReducer {
         }
 
         // extract resource name from `mutableSpanTags`
-        if let resourceName = mutableSpanTags.removeValue(forKey: SpanTags.resource) as? String {
+        if let resourceName: String = mutableSpanTags.removeValue(forKey: SpanTags.resource)?.dd.decode() {
             extractedResourceName = resourceName
+        }
+
+        if let operationName: String = mutableSpanTags.removeValue(forKey: SpanTags.operation)?.dd.decode() {
+            extractedOperationName = operationName
+        }
+
+        if let serviceName: String = mutableSpanTags.removeValue(forKey: SpanTags.service)?.dd.decode() {
+            extractedServiceName = serviceName
         }
 
         self.reducedSpanTags = mutableSpanTags
         self.extractedIsError = extractedIsError
         self.extractedResourceName = extractedResourceName
+        self.extractedOperationName = extractedOperationName
+        self.extractedServiceName = extractedServiceName
     }
 }

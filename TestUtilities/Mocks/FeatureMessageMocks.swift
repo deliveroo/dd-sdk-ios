@@ -10,12 +10,14 @@ import DatadogInternal
 public extension Array where Element == FeatureMessage {
     /// Unpacks the first "baggage message" with given key in this array.
     func firstBaggage(withKey key: String) -> FeatureBaggage? {
-        return compactMap({ $0.asBaggage }).filter({ $0.key == key }).first?.baggage
+        return compactMap({ $0.asBaggage })
+            .first(where: { $0.key == key })?.baggage
     }
 
     /// Unpacks the last "baggage message" with given key in this array.
     func lastBaggage(withKey key: String) -> FeatureBaggage? {
-        return compactMap({ $0.asBaggage }).filter({ $0.key == key }).last?.baggage
+        return compactMap({ $0.asBaggage })
+            .last(where: { $0.key == key })?.baggage
     }
 
     /// Unpacks the first "baggage message" with given key in this array.
@@ -29,8 +31,13 @@ public extension Array where Element == FeatureMessage {
     }
 
     /// Unpacks the first "telemetry message" in this array.
-    func firstTelemetry() -> TelemetryMessage? {
-        return compactMap({ $0.asTelemetry }).first
+    var firstTelemetry: TelemetryMessage? {
+        compactMap({ $0.asTelemetry }).first
+    }
+
+    /// Unpacks the last "telemetry message" in this array.
+    var lastTelemetry: TelemetryMessage? {
+        compactMap({ $0.asTelemetry }).last
     }
 }
 

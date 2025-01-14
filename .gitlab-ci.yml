@@ -1,86 +1,391 @@
 stages:
-  - info
+  - pre
   - lint
   - test
+  - ui-test
+  - smoke-test
+  - e2e-test
+  - benchmark-test
+  - dogfood
+  - release-build
+  - release-publish
+  - post
 
-ENV info:
-  stage: info
+variables:
+  MAIN_BRANCH: "master"
+  DEVELOP_BRANCH: "develop"
+  # Default Xcode and runtime versions for all jobs:
+  DEFAULT_XCODE: "15.4.0"
+  DEFAULT_IOS_OS: "17.5"
+  DEFAULT_TVOS_OS: "17.5"
+  # Prefilled variables for running a pipeline manually:
+  # Ref.: https://docs.gitlab.com/ee/ci/pipelines/index.html#prefill-variables-in-manual-pipelines
+  RELEASE_GIT_TAG:
+    description: "The Git tag for the release pipeline. If set, release pipeline will be triggered for the given tag."
+  RELEASE_DRY_RUN:
+    value: "1"
+    description: "Controls the dry run mode for the release pipeline. If set to '1', the pipeline will execute all steps but will not publish artifacts. If set to '0', the pipeline will run fully."
+
+default:
   tags:
-    - mac-ventura-preview
-  allow_failure: true # do not block GH PRs
+    - macos:sonoma
+    - specific:true
+
+# ┌───────────────┐
+# │ Utility jobs: │
+# └───────────────┘
+
+# Utility jobs define rules for including or excluding dependent jobs from the pipeline.
+#
+# Ref.: https://docs.gitlab.com/ee/ci/jobs/job_rules.html
+# > Rules are evaluated in order until the first match. When a match is found, the job is either included or excluded
+# > from the pipeline, depending on the configuration.
+
+.test-pipeline-job:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $DEVELOP_BRANCH || $CI_COMMIT_BRANCH == $MAIN_BRANCH' # always on main branches
+    - if: '$CI_COMMIT_BRANCH' # when on other branch with following changes compared to develop
+      changes:
+        paths:
+          - "Datadog*/**/*"
+          - "IntegrationTests/**/*"
+          - "SmokeTests/**/*"
+          - "TestUtilities/**/*"
+          - "*" # match any file in the root directory
+        compare_to: 'develop' # cannot use $DEVELOP_BRANCH var due to: https://gitlab.com/gitlab-org/gitlab/-/issues/369916
+
+.release-pipeline-job:
+  rules: 
+    - if: '$CI_COMMIT_TAG || $RELEASE_GIT_TAG'
+
+.release-pipeline-20m-delayed-job:
+  rules: 
+    - if: '$CI_COMMIT_TAG || $RELEASE_GIT_TAG'
+      when: delayed
+      start_in: 20 minutes
+
+.release-pipeline-40m-delayed-job:
+  rules: 
+    - if: '$CI_COMMIT_TAG || $RELEASE_GIT_TAG'
+      when: delayed
+      start_in: 40 minutes
+
+ENV check:
+  stage: pre
+  rules: 
+    - !reference [.test-pipeline-job, rules]
+    - !reference [.release-pipeline-job, rules]
   script:
-    - system_profiler SPSoftwareDataType # system info
-    - xcodebuild -version
-    - xcode-select -p # default Xcode
-    - ls /Applications/ | grep Xcode # other Xcodes
-    - xcodebuild -workspace "Datadog.xcworkspace" -scheme "DatadogCore iOS" -showdestinations -quiet # installed iOS destinations
-    - xcodebuild -workspace "Datadog.xcworkspace" -scheme "DatadogCore tvOS" -showdestinations -quiet # installed tvOS destinations
-    - xcbeautify --version
-    - swiftlint --version
-    - carthage version
-    - gh --version
-    - brew -v
-    - bundler --version
-    - python3 -V
+    - ./tools/runner-setup.sh --datadog-ci
+    - make env-check
+
+# ┌──────────────────────────┐
+# │ SDK changes integration: │
+# └──────────────────────────┘
 
 Lint:
   stage: lint
-  tags:
-    - mac-ventura-preview
-  allow_failure: true # do not block GH PRs
+  rules: 
+    - !reference [.test-pipeline-job, rules]
   script:
-    - ./tools/lint/run-linter.sh
-    - ./tools/license/check-license.sh
+    - make clean repo-setup ENV=ci
+    - make lint license-check
+    - make rum-models-verify sr-models-verify
 
-SDK unit tests (iOS):
+Unit Tests (iOS):
   stage: test
-  tags:
-    - mac-ventura-preview
-  allow_failure: true # do not block GH PRs
+  rules: 
+    - !reference [.test-pipeline-job, rules]
+    - !reference [.release-pipeline-job, rules]
   variables:
-    TEST_WORKSPACE: "Datadog.xcworkspace"
-    TEST_DESTINATION: "platform=iOS Simulator,name=iPhone 15 Pro Max,OS=17.0.1"
+    PLATFORM: "iOS Simulator"
+    DEVICE: "iPhone 15 Pro"
   script:
-    - make dependencies-gitlab
-    - xcodebuild -workspace "$TEST_WORKSPACE" -destination "$TEST_DESTINATION" -scheme "DatadogCore iOS" -only-testing:"DatadogCoreTests iOS" test | xcbeautify
-    - xcodebuild -workspace "$TEST_WORKSPACE" -destination "$TEST_DESTINATION" -scheme "DatadogCore iOS" -only-testing:"DatadogInternalTests iOS" test | xcbeautify
-    - xcodebuild -workspace "$TEST_WORKSPACE" -destination "$TEST_DESTINATION" -scheme "DatadogCore iOS" -only-testing:"DatadogLogsTests iOS" test | xcbeautify
-    - xcodebuild -workspace "$TEST_WORKSPACE" -destination "$TEST_DESTINATION" -scheme "DatadogCore iOS" -only-testing:"DatadogTraceTests iOS" test | xcbeautify
-    - xcodebuild -workspace "$TEST_WORKSPACE" -destination "$TEST_DESTINATION" -scheme "DatadogCore iOS" -only-testing:"DatadogRUMTests iOS" test | xcbeautify
-    - xcodebuild -workspace "$TEST_WORKSPACE" -destination "$TEST_DESTINATION" -scheme "DatadogCore iOS" -only-testing:"DatadogWebViewTrackingTests iOS" test | xcbeautify
-    - xcodebuild -workspace "$TEST_WORKSPACE" -destination "$TEST_DESTINATION" -scheme "DatadogSessionReplay iOS" test | xcbeautify
-    - xcodebuild -workspace "$TEST_WORKSPACE" -destination "$TEST_DESTINATION" -scheme "DatadogCrashReporting iOS" test | xcbeautify
+    - ./tools/runner-setup.sh --xcode "$DEFAULT_XCODE"
+    - make clean repo-setup ENV=ci
+    - make test-ios-all OS="$DEFAULT_IOS_OS" PLATFORM="$PLATFORM" DEVICE="$DEVICE" USE_TEST_VISIBILITY=1
 
-SDK unit tests (tvOS):
+Unit Tests (tvOS):
   stage: test
-  tags:
-    - mac-ventura-preview
-  allow_failure: true # do not block GH PRs
+  rules: 
+    - !reference [.test-pipeline-job, rules]
+    - !reference [.release-pipeline-job, rules]
   variables:
-    TEST_WORKSPACE: "Datadog.xcworkspace"
-    TEST_DESTINATION: "platform=tvOS Simulator,name=Apple TV,OS=17.0"
+    PLATFORM: "tvOS Simulator"
+    DEVICE: "Apple TV"
   script:
-    - make dependencies-gitlab
-    - xcodebuild -workspace "$TEST_WORKSPACE" -destination "$TEST_DESTINATION" -scheme "DatadogCore tvOS" -only-testing:"DatadogCoreTests tvOS" test | xcbeautify
-    - xcodebuild -workspace "$TEST_WORKSPACE" -destination "$TEST_DESTINATION" -scheme "DatadogCore tvOS" -only-testing:"DatadogInternalTests tvOS" test | xcbeautify
-    - xcodebuild -workspace "$TEST_WORKSPACE" -destination "$TEST_DESTINATION" -scheme "DatadogCore tvOS" -only-testing:"DatadogLogsTests tvOS" test | xcbeautify
-    - xcodebuild -workspace "$TEST_WORKSPACE" -destination "$TEST_DESTINATION" -scheme "DatadogCore tvOS" -only-testing:"DatadogTraceTests tvOS" test | xcbeautify
-    - xcodebuild -workspace "$TEST_WORKSPACE" -destination "$TEST_DESTINATION" -scheme "DatadogCore tvOS" -only-testing:"DatadogRUMTests tvOS" test | xcbeautify
-    - xcodebuild -workspace "$TEST_WORKSPACE" -destination "$TEST_DESTINATION" -scheme "DatadogCrashReporting tvOS" test | xcbeautify
+    - ./tools/runner-setup.sh --xcode "$DEFAULT_XCODE"
+    - make clean repo-setup ENV=ci
+    - make test-tvos-all OS="$DEFAULT_TVOS_OS" PLATFORM="$PLATFORM" DEVICE="$DEVICE" USE_TEST_VISIBILITY=1
 
-SDK integration tests (iOS):
-  stage: test
-  tags:
-    - mac-ventura-preview
-  allow_failure: true # do not block GH PRs
+UI Tests:
+  stage: ui-test
+  rules: 
+    - !reference [.test-pipeline-job, rules]
+    - !reference [.release-pipeline-job, rules]
   variables:
-    TEST_WORKSPACE: "IntegrationTests/IntegrationTests.xcworkspace"
-    TEST_DESTINATION: "platform=iOS Simulator,name=iPhone 15 Pro Max,OS=17.0.1"
+    PLATFORM: "iOS Simulator"
+    DEVICE: "iPhone 15 Pro"
+  parallel:
+    matrix:
+      - TEST_PLAN:
+          - Default
+          - RUM
+          - CrashReporting
+          - NetworkInstrumentation
   script:
-    - make dependencies-gitlab
-    - make prepare-integration-tests
-    # Before running crash reporting tests, disable Apple Crash Reporter so it doesn't capture the crash causing tests hang on "<app> quit unexpectedly" prompt:
-    - launchctl unload -w /System/Library/LaunchAgents/com.apple.ReportCrash.plist
-    - ./tools/config/generate-http-server-mock-config.sh
-    - xcodebuild -workspace "$TEST_WORKSPACE" -destination "$TEST_DESTINATION" -scheme "IntegrationScenarios" -testPlan DatadogIntegrationTests test | xcbeautify
-    - xcodebuild -workspace "$TEST_WORKSPACE" -destination "$TEST_DESTINATION" -scheme "IntegrationScenarios" -testPlan DatadogCrashReportingIntegrationTests test | xcbeautify
+    - ./tools/runner-setup.sh --xcode "$DEFAULT_XCODE"
+    - make clean repo-setup ENV=ci
+    - make ui-test TEST_PLAN="$TEST_PLAN" OS="$DEFAULT_IOS_OS" PLATFORM="$PLATFORM" DEVICE="$DEVICE"
+
+SR Snapshot Tests:
+  stage: ui-test
+  rules: 
+    - !reference [.test-pipeline-job, rules]
+    - !reference [.release-pipeline-job, rules]
+  variables:
+    PLATFORM: "iOS Simulator"
+    DEVICE: "iPhone 15"
+    ARTIFACTS_PATH: "artifacts"
+  artifacts:
+    paths:
+      - artifacts
+    expire_in: 1 week
+    when: on_failure
+  script:
+    - ./tools/runner-setup.sh --xcode "$DEFAULT_XCODE" --ssh
+    - make clean repo-setup ENV=ci
+    - make sr-snapshots-pull sr-snapshot-test OS="$DEFAULT_IOS_OS" PLATFORM="$PLATFORM" DEVICE="$DEVICE" ARTIFACTS_PATH="$ARTIFACTS_PATH"
+
+Tools Tests:
+  stage: test
+  rules:
+    - if: '$CI_COMMIT_BRANCH' # when on branch with following changes compared to develop
+      changes:
+        paths:
+          - "tools/**/*"
+          - "Makefile"
+          - ".gitlab-ci.yml"
+        compare_to: 'develop'
+  script:
+    - make clean repo-setup ENV=ci
+    - make tools-test
+
+Benchmark Build:
+  stage: smoke-test
+  rules:
+    - if: '$CI_COMMIT_BRANCH' # when on branch with following changes compared to develop
+      changes:
+        paths:
+          - "BenchmarkTests/**/*"
+        compare_to: 'develop'
+  script:
+    - make benchmark-build
+
+Smoke Tests (iOS):
+  stage: smoke-test
+  rules: 
+    - !reference [.test-pipeline-job, rules]
+    - !reference [.release-pipeline-job, rules]
+  variables:
+    PLATFORM: "iOS Simulator"
+    DEVICE: "iPhone 15 Pro"
+  script:
+    - ./tools/runner-setup.sh --xcode "$DEFAULT_XCODE" --ssh
+    - make clean repo-setup ENV=ci
+    - make smoke-test-ios-all OS="$DEFAULT_IOS_OS" PLATFORM="$PLATFORM" DEVICE="$DEVICE"
+
+Smoke Tests (tvOS):
+  stage: smoke-test
+  rules: 
+    - !reference [.test-pipeline-job, rules]
+    - !reference [.release-pipeline-job, rules]
+  variables:
+    PLATFORM: "tvOS Simulator"
+    DEVICE: "Apple TV"
+  script:
+    - ./tools/runner-setup.sh --xcode "$DEFAULT_XCODE" --ssh
+    - make clean repo-setup ENV=ci
+    - make smoke-test-tvos-all OS="$DEFAULT_IOS_OS" PLATFORM="$PLATFORM" DEVICE="$DEVICE"
+
+SPM Build (Swift 5.10):
+  stage: smoke-test
+  rules: 
+    - !reference [.test-pipeline-job, rules]
+    - !reference [.release-pipeline-job, rules]
+  script:
+    - ./tools/runner-setup.sh --xcode "$DEFAULT_XCODE" --iOS --tvOS --visionOS --watchOS
+    - make clean repo-setup ENV=ci
+    - make spm-build-ios
+    - make spm-build-tvos
+    - make spm-build-visionos
+    - make spm-build-macos
+    - make spm-build-watchos
+
+SPM Build (Swift 5.9):
+  stage: smoke-test
+  rules: 
+    - !reference [.test-pipeline-job, rules]
+    - !reference [.release-pipeline-job, rules]
+  tags:
+    - macos:ventura
+    - specific:true
+  variables:
+    XCODE: "15.2.0"
+  script:
+    - ./tools/runner-setup.sh --xcode "$XCODE" --iOS --tvOS --visionOS --watchOS
+    - make clean repo-setup ENV=ci
+    - make spm-build-ios
+    - make spm-build-tvos
+    - make spm-build-visionos
+    - make spm-build-macos
+    - make spm-build-watchos
+
+# ┌──────────────────────┐
+# │ E2E Test app upload: │
+# └──────────────────────┘
+
+E2E Test (upload to s8s):
+  stage: e2e-test
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $DEVELOP_BRANCH'
+  artifacts:
+    paths:
+      - artifacts
+    expire_in: 2 weeks
+  script:
+    - ./tools/runner-setup.sh --xcode "$DEFAULT_XCODE" --datadog-ci
+    - make clean
+    - export DRY_RUN=${DRY_RUN:-0} # default to 0 if not specified
+    - make e2e-upload ARTIFACTS_PATH="artifacts/e2e"
+
+# ┌────────────────────────────┐
+# │ Benchmark Test app upload: │
+# └────────────────────────────┘
+
+Benchmark Test (upload to s8s):
+  stage: benchmark-test
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $DEVELOP_BRANCH'
+      allow_failure: true
+  artifacts:
+    paths:
+      - artifacts
+    expire_in: 2 weeks
+  script:
+    - ./tools/runner-setup.sh --xcode "$DEFAULT_XCODE" --datadog-ci
+    - make clean
+    - export DRY_RUN=${DRY_RUN:-0} # default to 0 if not specified
+    - make benchmark-upload ARTIFACTS_PATH="artifacts/benchmark"
+
+# ┌─────────────────┐
+# │ SDK dogfooding: │
+# └─────────────────┘
+
+Dogfood (Shopist):
+  stage: dogfood
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $DEVELOP_BRANCH'
+      when: manual
+      allow_failure: true
+  script:
+    - ./tools/runner-setup.sh --ssh
+    - DRY_RUN=0 make dogfood-shopist
+
+Dogfood (Datadog app):
+  stage: dogfood
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $DEVELOP_BRANCH'
+      when: manual
+      allow_failure: true
+  script:
+    - ./tools/runner-setup.sh --ssh
+    - DRY_RUN=0 make dogfood-datadog-app
+
+# ┌──────────────┐
+# │ SDK release: │
+# └──────────────┘
+
+.release-before-script: &export_MAKE_release_params
+  - export GIT_TAG=${RELEASE_GIT_TAG:-$CI_COMMIT_TAG} # CI_COMMIT_TAG if set, otherwise default to RELEASE_GIT_TAG
+  - if [ -z "$GIT_TAG" ]; then echo "GIT_TAG is not set"; exit 1; fi # sanity check
+  - export ARTIFACTS_PATH="artifacts/$GIT_TAG"
+  - export DRY_RUN=${CI_COMMIT_TAG:+0} # 0 if CI_COMMIT_TAG is set
+  - export DRY_RUN=${DRY_RUN:-$RELEASE_DRY_RUN} # otherwise default to RELEASE_DRY_RUN
+
+Build Artifacts:
+  stage: release-build
+  rules: 
+    - !reference [.release-pipeline-job, rules]
+  artifacts:
+    paths:
+      - artifacts
+    expire_in: 4 weeks
+  before_script:
+    - *export_MAKE_release_params
+  script:
+    - ./tools/runner-setup.sh --xcode "$DEFAULT_XCODE" --ssh
+    - make env-check
+    - make clean
+    - make release-build release-validate
+
+Publish GH Asset:
+  stage: release-publish
+  rules: 
+    - !reference [.release-pipeline-job, rules]
+  before_script:
+    - *export_MAKE_release_params
+  script:
+    - ./tools/runner-setup.sh --xcode "$DEFAULT_XCODE"
+    - make env-check
+    - make clean
+    - make release-publish-github
+
+Publish CP podspecs (internal):
+  stage: release-publish
+  rules: 
+    - !reference [.release-pipeline-job, rules]
+  before_script:
+    - *export_MAKE_release_params
+  script:
+    - ./tools/runner-setup.sh --xcode "$DEFAULT_XCODE"
+    - make env-check
+    - make clean
+    - make release-publish-internal-podspecs
+
+Publish CP podspecs (dependent):
+  stage: release-publish
+  rules: 
+    - !reference [.release-pipeline-20m-delayed-job, rules]
+  before_script:
+    - *export_MAKE_release_params
+  needs: ["Build Artifacts", "Publish CP podspecs (internal)"]
+  script:
+    - ./tools/runner-setup.sh --xcode "$DEFAULT_XCODE"
+    - make env-check
+    - make clean
+    - make release-publish-dependent-podspecs
+
+Publish CP podspecs (legacy):
+  stage: release-publish
+  rules: 
+    - !reference [.release-pipeline-40m-delayed-job, rules]
+  before_script:
+    - *export_MAKE_release_params
+  needs: ["Build Artifacts", "Publish CP podspecs (dependent)"]
+  script:
+    - ./tools/runner-setup.sh --xcode "$DEFAULT_XCODE"
+    - make env-check
+    - make clean
+    - make release-publish-legacy-podspecs
+
+# ┌────────────────┐
+# │ Notifications: │
+# └────────────────┘
+
+# This job runs at the end of every successful pipeline.
+# It syncs the GitLab pipeline status with GitHub status checks.
+Sync GH Checks:
+  stage: post
+  script:
+    - echo "All good"

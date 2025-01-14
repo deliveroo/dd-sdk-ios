@@ -35,8 +35,25 @@ extension SRWireframe: Diffable {
             return this.hashValue != other.hashValue
         case let (.placeholderWireframe(this), .placeholderWireframe(other)):
             return this.hashValue != other.hashValue
+        case let (.webviewWireframe(this), .webviewWireframe(other)):
+            return this.hashValue != other.hashValue
         default:
             return true
+        }
+    }
+
+    var type: String {
+        switch self {
+        case let (.shapeWireframe(value)):
+            return value.type
+        case let (.textWireframe(value)):
+            return value.type
+        case let (.imageWireframe(value)):
+            return value.type
+        case let (.placeholderWireframe(value)):
+            return value.type
+        case let (.webviewWireframe(value)):
+            return value.type
         }
     }
 }
@@ -45,11 +62,11 @@ extension SRWireframe: Diffable {
 
 internal typealias WireframeMutation = SRIncrementalSnapshotRecord.Data.MutationData.Updates
 
-internal enum WireframeMutationError: Error {
+internal enum WireframeMutationError: Error, Equatable {
     /// Indicates an attempt of computing mutation for wireframes that have different `id`.
     case idMismatch
     /// Indicates an attempt of computing mutation for wireframes that have different type.
-    case typeMismatch
+    case typeMismatch(fromType: String, toType: String)
 }
 
 internal protocol MutableWireframe {
@@ -59,7 +76,18 @@ internal protocol MutableWireframe {
 
 /// Syntactic sugar to return `new` value if it's different than `old`.
 private func use<V: Equatable>(_ new: V?, ifDifferentThan old: V?) -> V? {
-    return new == old ? nil : new
+    new == old ? nil : new
+}
+
+/// Apply dedicated merge for Content Clip where we need to reset value to `0` when the value is **back** to `nil`.
+/// That is because the player assumes no change when value is `nil`, but `nil` also means no clipping.
+private func use(_ new: SRContentClip?, ifDifferentThan old: SRContentClip?) -> SRContentClip? {
+    new != old ? SRContentClip(
+        bottom: new?.bottom ?? old?.bottom.map { _ in 0 },
+        left: new?.left ?? old?.left.map { _ in 0 },
+        right: new?.right ?? old?.right.map { _ in 0 },
+        top: new?.top ?? old?.top.map { _ in 0 }
+    ) : nil
 }
 
 extension SRWireframe: MutableWireframe {
@@ -82,8 +110,12 @@ extension SRWireframe: MutableWireframe {
 extension SRShapeWireframe: MutableWireframe {
     func mutations(from otherWireframe: SRWireframe) throws -> WireframeMutation {
         guard case .shapeWireframe(let other) = otherWireframe else {
-            throw WireframeMutationError.typeMismatch
+            throw WireframeMutationError.typeMismatch(
+                fromType: otherWireframe.type,
+                toType: type
+            )
         }
+
         guard other.id == id else {
             throw WireframeMutationError.idMismatch
         }
@@ -106,7 +138,10 @@ extension SRShapeWireframe: MutableWireframe {
 extension SRPlaceholderWireframe: MutableWireframe {
     func mutations(from otherWireframe: SRWireframe) throws -> WireframeMutation {
         guard case .placeholderWireframe(let other) = otherWireframe else {
-            throw WireframeMutationError.typeMismatch
+            throw WireframeMutationError.typeMismatch(
+                fromType: otherWireframe.type,
+                toType: type
+            )
         }
         guard other.id == id else {
             throw WireframeMutationError.idMismatch
@@ -128,7 +163,10 @@ extension SRPlaceholderWireframe: MutableWireframe {
 extension SRImageWireframe: MutableWireframe {
     func mutations(from otherWireframe: SRWireframe) throws -> WireframeMutation {
         guard case .imageWireframe(let other) = otherWireframe else {
-            throw WireframeMutationError.typeMismatch
+            throw WireframeMutationError.typeMismatch(
+                fromType: otherWireframe.type,
+                toType: type
+            )
         }
         guard other.id == id else {
             throw WireframeMutationError.idMismatch
@@ -155,7 +193,10 @@ extension SRImageWireframe: MutableWireframe {
 extension SRTextWireframe: MutableWireframe {
     func mutations(from otherWireframe: SRWireframe) throws -> WireframeMutation {
         guard case .textWireframe(let other) = otherWireframe else {
-            throw WireframeMutationError.typeMismatch
+            throw WireframeMutationError.typeMismatch(
+                fromType: otherWireframe.type,
+                toType: type
+            )
         }
         guard other.id == id else {
             throw WireframeMutationError.idMismatch
@@ -182,7 +223,10 @@ extension SRTextWireframe: MutableWireframe {
 extension SRWebviewWireframe: MutableWireframe {
     func mutations(from otherWireframe: SRWireframe) throws -> WireframeMutation {
         guard case .webviewWireframe(let other) = otherWireframe else {
-            throw WireframeMutationError.typeMismatch
+            throw WireframeMutationError.typeMismatch(
+                fromType: otherWireframe.type,
+                toType: type
+            )
         }
         guard other.id == id, other.slotId == slotId else {
             throw WireframeMutationError.idMismatch
@@ -194,6 +238,7 @@ extension SRWebviewWireframe: MutableWireframe {
                 clip: use(clip, ifDifferentThan: other.clip),
                 height: use(height, ifDifferentThan: other.height),
                 id: id,
+                isVisible: use(isVisible, ifDifferentThan: other.isVisible),
                 shapeStyle: use(shapeStyle, ifDifferentThan: other.shapeStyle),
                 slotId: slotId,
                 width: use(width, ifDifferentThan: other.width),
@@ -234,4 +279,5 @@ extension SRImageWireframe {
         hasher.combine(y)
     }
 }
+
 #endif

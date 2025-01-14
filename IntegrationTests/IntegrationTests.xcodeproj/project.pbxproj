@@ -211,6 +211,8 @@
 		6193DCCD251B6201009B8011 /* RUMTASScreen1ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RUMTASScreen1ViewController.swift; sourceTree = "<group>"; };
 		6193DCE0251B692C009B8011 /* RUMTASTableViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RUMTASTableViewController.swift; sourceTree = "<group>"; };
 		6193DCE7251B9AB1009B8011 /* RUMTASCollectionViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RUMTASCollectionViewController.swift; sourceTree = "<group>"; };
+		61A6F7792C208700005B74D5 /* RUM.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = RUM.xctestplan; sourceTree = "<group>"; };
+		61A6F77A2C20891C005B74D5 /* NetworkInstrumentation.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = NetworkInstrumentation.xctestplan; sourceTree = "<group>"; };
 		61B6811E25F0EA860015B4AF /* CrashReportingWithLoggingScenarioTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashReportingWithLoggingScenarioTests.swift; sourceTree = "<group>"; };
 		61B6815D25F135890015B4AF /* CrashReportingWithRUMScenarioTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashReportingWithRUMScenarioTests.swift; sourceTree = "<group>"; };
 		61B9ED1A2461E12000C0DCFF /* SendLogsFixtureViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SendLogsFixtureViewController.swift; sourceTree = "<group>"; };
@@ -257,10 +259,10 @@
 		D2774EE2299E2E90004EC36A /* LogMatcher.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LogMatcher.swift; sourceTree = "<group>"; };
 		D2774EE3299E2E90004EC36A /* JSONDataMatcher.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = JSONDataMatcher.swift; sourceTree = "<group>"; };
 		D2791EF827170A760046E07A /* RUMSwiftUIScenarioTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RUMSwiftUIScenarioTests.swift; sourceTree = "<group>"; };
-		D29495F429967780003518CD /* http-server-mock */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = "http-server-mock"; path = "../instrumented-tests/http-server-mock"; sourceTree = "<group>"; };
+		D29495F429967780003518CD /* http-server-mock */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = "http-server-mock"; path = "../tools/http-server-mock"; sourceTree = "<group>"; };
 		D2A401D029925A2D00B230A3 /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		D2AEFF1A29925BEC00A28997 /* DatadogCrashReportingIntegrationTests.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = DatadogCrashReportingIntegrationTests.xctestplan; sourceTree = "<group>"; };
-		D2AEFF1B29925BEC00A28997 /* DatadogIntegrationTests.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = DatadogIntegrationTests.xctestplan; sourceTree = "<group>"; };
+		D2AEFF1A29925BEC00A28997 /* CrashReporting.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = CrashReporting.xctestplan; sourceTree = "<group>"; };
+		D2AEFF1B29925BEC00A28997 /* Default.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = Default.xctestplan; sourceTree = "<group>"; };
 		D2F5BB35271831C200BDE2A4 /* RUMSwiftUIInstrumentationScenario.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = RUMSwiftUIInstrumentationScenario.storyboard; sourceTree = "<group>"; };
 		D2F5BB372718331800BDE2A4 /* SwiftUIRootViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftUIRootViewController.swift; sourceTree = "<group>"; };
 		D2FCA7482B4D829F0014DC87 /* CSPictureViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CSPictureViewController.swift; sourceTree = "<group>"; };
@@ -779,8 +781,10 @@
 		D2AEFF1929925BEC00A28997 /* xctestplans */ = {
 			isa = PBXGroup;
 			children = (
-				D2AEFF1A29925BEC00A28997 /* DatadogCrashReportingIntegrationTests.xctestplan */,
-				D2AEFF1B29925BEC00A28997 /* DatadogIntegrationTests.xctestplan */,
+				D2AEFF1B29925BEC00A28997 /* Default.xctestplan */,
+				61A6F7792C208700005B74D5 /* RUM.xctestplan */,
+				D2AEFF1A29925BEC00A28997 /* CrashReporting.xctestplan */,
+				61A6F77A2C20891C005B74D5 /* NetworkInstrumentation.xctestplan */,
 			);
 			path = xctestplans;
 			sourceTree = "<group>";
@@ -826,6 +830,7 @@
 				61441C0024616DE9003D8BB8 /* Resources */,
 				D240687A27CF982B00C04F44 /* Embed Frameworks */,
 				5DAD8F2510CB09A5BA7723B9 /* [CP] Copy Pods Resources */,
+				DF3E2FB0EA50CD3C8F9BF10E /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -848,6 +853,7 @@
 				61441C2724616F1D003D8BB8 /* Frameworks */,
 				61441C2824616F1D003D8BB8 /* Resources */,
 				7F6DA13A8C70117DE98BAFD7 /* [CP] Copy Pods Resources */,
+				D9453E03D25A266FEA724F80 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -1017,6 +1023,40 @@
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
+		D9453E03D25A266FEA724F80 /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-Runner iOS-IntegrationScenarios/Pods-Runner iOS-IntegrationScenarios-frameworks-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-Runner iOS-IntegrationScenarios/Pods-Runner iOS-IntegrationScenarios-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Runner iOS-IntegrationScenarios/Pods-Runner iOS-IntegrationScenarios-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		DF3E2FB0EA50CD3C8F9BF10E /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-Runner iOS/Pods-Runner iOS-frameworks-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-Runner iOS/Pods-Runner iOS-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Runner iOS/Pods-Runner iOS-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -1144,6 +1184,7 @@
 /* Begin XCBuildConfiguration section */
 		61133B94242393DE00786299 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = D223CA4E29966B18000CEDBF /* Base.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -1192,14 +1233,12 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 11.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				TVOS_DEPLOYMENT_TARGET = 11.0;
 				VERSIONING_SYSTEM = "apple-generic";
 				VERSION_INFO_PREFIX = "";
 			};
@@ -1207,6 +1246,7 @@
 		};
 		61133B95242393DE00786299 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = D223CA4E29966B18000CEDBF /* Base.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -1249,13 +1289,11 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 11.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
-				TVOS_DEPLOYMENT_TARGET = 11.0;
 				VALIDATE_PRODUCT = YES;
 				VERSIONING_SYSTEM = "apple-generic";
 				VERSION_INFO_PREFIX = "";
@@ -1280,7 +1318,6 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_TREAT_WARNINGS_AS_ERRORS = NO;
-				SWIFT_VERSION = 5.0;
 				VALIDATE_WORKSPACE = YES;
 			};
 			name = Debug;
@@ -1302,7 +1339,6 @@
 				PRODUCT_NAME = "Integration Tests Runner";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_TREAT_WARNINGS_AS_ERRORS = NO;
-				SWIFT_VERSION = 5.0;
 				VALIDATE_WORKSPACE = YES;
 			};
 			name = Release;
@@ -1324,7 +1360,6 @@
 				PRODUCT_NAME = "Integration Tests Runner";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_TREAT_WARNINGS_AS_ERRORS = NO;
-				SWIFT_VERSION = 5.0;
 				VALIDATE_WORKSPACE = YES;
 			};
 			name = Integration;
@@ -1344,7 +1379,6 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE = "";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG DD_COMPILED_FOR_INTEGRATION_TESTS";
-				SWIFT_VERSION = 5.0;
 				TEST_TARGET_NAME = "Runner iOS";
 				VALIDATE_WORKSPACE = YES;
 			};
@@ -1365,7 +1399,6 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE = "";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DD_COMPILED_FOR_INTEGRATION_TESTS;
-				SWIFT_VERSION = 5.0;
 				TEST_TARGET_NAME = "Runner iOS";
 				VALIDATE_WORKSPACE = YES;
 			};
@@ -1386,7 +1419,6 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE = "";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DD_COMPILED_FOR_INTEGRATION_TESTS;
-				SWIFT_VERSION = 5.0;
 				TEST_TARGET_NAME = "Runner iOS";
 				VALIDATE_WORKSPACE = YES;
 			};
@@ -1394,6 +1426,7 @@
 		};
 		9E2FB28224476765001C9B7B /* Integration */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = D223CA4E29966B18000CEDBF /* Base.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -1437,13 +1470,11 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 11.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
-				TVOS_DEPLOYMENT_TARGET = 11.0;
 				VALIDATE_PRODUCT = YES;
 				VERSIONING_SYSTEM = "apple-generic";
 				VERSION_INFO_PREFIX = "";

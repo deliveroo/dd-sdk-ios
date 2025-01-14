@@ -4,15 +4,17 @@
  * Copyright 2019-Present Datadog, Inc.
  */
 
+#if os(iOS)
 import XCTest
 @testable import DatadogSessionReplay
 
 // Soft checks, because different iOS versions may produce different image data or hashing
 final class UIImageResourceTests: XCTestCase {
     func testWhenUIImageResourceIsInitializedWithEmptyImage() {
-        let imageResource = UIImageResource(image: UIImage(), tintColor: nil)
+        let image = UIImage()
+        let imageResource = UIImageResource(image: image, tintColor: nil)
 
-        XCTAssertEqual(imageResource.calculateIdentifier(), "")
+        XCTAssertEqual(imageResource.calculateIdentifier(), "\(image.hash)")
         XCTAssertEqual(imageResource.calculateData(), Data())
     }
 
@@ -61,3 +63,4 @@ final class UIImageResourceTests: XCTestCase {
         return image
     }
 }
+#endif

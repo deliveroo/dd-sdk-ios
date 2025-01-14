@@ -12,36 +12,93 @@ import TestUtilities
 import DatadogInternal
 @testable import DatadogWebViewTracking
 
-final class DDUserContentController: WKUserContentController {
-    typealias NameHandlerPair = (name: String, handler: WKScriptMessageHandler)
-    private(set) var messageHandlers = [NameHandlerPair]()
-
-    override func add(_ scriptMessageHandler: WKScriptMessageHandler, name: String) {
-        messageHandlers.append((name: name, handler: scriptMessageHandler))
-    }
-
-    override func removeScriptMessageHandler(forName name: String) {
-        messageHandlers = messageHandlers.filter {
-            return $0.name != name
-        }
-    }
-}
-
-final class MockMessageHandler: NSObject, WKScriptMessageHandler {
-    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) { }
-}
-
-final class MockScriptMessage: WKScriptMessage {
-    let mockBody: Any
-
-    init(body: Any) {
-        self.mockBody = body
-    }
-
-    override var body: Any { return mockBody }
-}
-
 class WebViewTrackingTests: XCTestCase {
+    func testItAddsUserScript() throws {
+        let mockSanitizer = HostsSanitizerMock()
+        let controller = DDUserContentController()
+
+        let host: String = .mockRandom()
+
+        WebViewTracking.enable(
+            tracking: controller,
+            hosts: [host],
+            hostsSanitizer: mockSanitizer,
+            logsSampleRate: 30,
+            in: PassthroughCoreMock()
+        )
+
+        let script = try XCTUnwrap(controller.userScripts.last)
+        XCTAssertEqual(script.source, """
+        /* DatadogEventBridge */
+        window.DatadogEventBridge = {
+            send(msg) {
+                window.webkit.messageHandlers.DatadogEventBridge.postMessage(msg)
+            },
+            getAllowedWebViewHosts() {
+                return '["\(host)"]'
+            },
+            getCapabilities() {
+                return '[]'
+            },
+            getPrivacyLevel() {
+                return 'mask'
+            }
+        }
+        """)
+    }
+
+    func testItAddsUserScriptWithSessionReplay() throws {
+        struct SessionReplayFeature: DatadogFeature, SessionReplayConfiguration {
+            static let name = "session-replay"
+            let messageReceiver: FeatureMessageReceiver = NOPFeatureMessageReceiver()
+            let textAndInputPrivacyLevel: DatadogInternal.TextAndInputPrivacyLevel
+            let imagePrivacyLevel: DatadogInternal.ImagePrivacyLevel
+            let touchPrivacyLevel: DatadogInternal.TouchPrivacyLevel
+        }
+
+        let mockSanitizer = HostsSanitizerMock()
+        let controller = DDUserContentController()
+
+        let host: String = .mockRandom()
+        let sr = SessionReplayFeature(
+            textAndInputPrivacyLevel: .mockRandom(),
+            imagePrivacyLevel: .mockRandom(),
+            touchPrivacyLevel: .mockRandom()
+        )
+        let privacyLevel = WebViewTracking.determineWebViewPrivacyLevel(
+            textPrivacy: sr.textAndInputPrivacyLevel,
+            imagePrivacy: sr.imagePrivacyLevel,
+            touchPrivacy: sr.touchPrivacyLevel
+        )
+
+        WebViewTracking.enable(
+            tracking: controller,
+            hosts: [host],
+            hostsSanitizer: mockSanitizer,
+            logsSampleRate: 30,
+            in: SingleFeatureCoreMock(feature: sr)
+        )
+
+        let script = try XCTUnwrap(controller.userScripts.last)
+        XCTAssertEqual(script.source, """
+        /* DatadogEventBridge */
+        window.DatadogEventBridge = {
+            send(msg) {
+                window.webkit.messageHandlers.DatadogEventBridge.postMessage(msg)
+            },
+            getAllowedWebViewHosts() {
+                return '["\(host)"]'
+            },
+            getCapabilities() {
+                return '["records"]'
+            },
+            getPrivacyLevel() {
+                return '\(privacyLevel.rawValue)'
+            }
+        }
+        """)
+    }
+
     func testItAddsUserScriptAndMessageHandler() throws {
         let mockSanitizer = HostsSanitizerMock()
         let controller = DDUserContentController()
@@ -281,6 +338,7 @@ class WebViewTrackingTests: XCTestCase {
 
     func testSendingWebRecordEvent() throws {
         let recordMessageExpectation = expectation(description: "Record message received")
+        let webView = WKWebView()
         let controller = DDUserContentController()
 
         let core = PassthroughCoreMock(
@@ -290,7 +348,7 @@ class WebViewTrackingTests: XCTestCase {
                     XCTAssertEqual(view.id, "64308fd4-83f9-48cb-b3e1-1e91f6721230")
                     let matcher = JSONObjectMatcher(object: event)
                     XCTAssertEqual(try? matcher.value("date"), 1_635_932_927_012)
-                    XCTAssertEqual(try? matcher.value("slotId"), "\(controller.hash)")
+                    XCTAssertEqual(try? matcher.value("slotId"), String(webView.hash))
                     recordMessageExpectation.fulfill()
                 case .context:
                     break
@@ -317,7 +375,7 @@ class WebViewTrackingTests: XCTestCase {
           },
           "view": { "id": "64308fd4-83f9-48cb-b3e1-1e91f6721230" }
         }
-        """)
+        """, webView: webView)
 
         messageHandler?.userContentController(controller, didReceive: webLogMessage)
         waitForExpectations(timeout: 1)

@@ -25,6 +25,7 @@ extension DatadogContext: AnyMockable {
         serverTimeOffset: TimeInterval = .zero,
         applicationName: String = .mockAny(),
         applicationBundleIdentifier: String = .mockAny(),
+        applicationBundleType: BundleType = .mockAny(),
         sdkInitDate: Date = Date(),
         nativeSourceOverride: String? = nil,
         device: DeviceInfo = .mockAny(),
@@ -53,6 +54,7 @@ extension DatadogContext: AnyMockable {
             serverTimeOffset: serverTimeOffset,
             applicationName: applicationName,
             applicationBundleIdentifier: applicationBundleIdentifier,
+            applicationBundleType: applicationBundleType,
             sdkInitDate: sdkInitDate,
             device: device,
             nativeSourceOverride: nativeSourceOverride,
@@ -84,6 +86,7 @@ extension DatadogContext: AnyMockable {
             serverTimeOffset: .mockRandomInThePast(),
             applicationName: .mockRandom(),
             applicationBundleIdentifier: .mockRandom(),
+            applicationBundleType: .mockRandom(),
             sdkInitDate: .mockRandomInThePast(),
             device: .mockRandom(),
             userInfo: .mockRandom(),
@@ -109,6 +112,16 @@ extension DatadogSite: AnyMockable, RandomMockable {
     }
 }
 
+extension BundleType: AnyMockable, RandomMockable {
+    public static func mockAny() -> Self {
+        return .iOSApp
+    }
+
+    public static func mockRandom() -> Self {
+        return [.iOSApp, .iOSAppExtension].randomElement()!
+    }
+}
+
 extension DeviceInfo {
     public static func mockAny() -> DeviceInfo {
         return .mockWith()
@@ -120,7 +133,11 @@ extension DeviceInfo {
         osName: String = "iOS",
         osVersion: String = "15.4.1",
         osBuildNumber: String = "13D20",
-        architecture: String = "arm64e"
+        architecture: String = "arm64e",
+        isSimulator: Bool = true,
+        vendorId: String? = "xyz",
+        isDebugging: Bool = false,
+        systemBootTime: TimeInterval = Date.timeIntervalSinceReferenceDate
     ) -> DeviceInfo {
         return .init(
             name: name,
@@ -128,7 +145,11 @@ extension DeviceInfo {
             osName: osName,
             osVersion: osVersion,
             osBuildNumber: osBuildNumber,
-            architecture: architecture
+            architecture: architecture,
+            isSimulator: isSimulator,
+            vendorId: vendorId,
+            isDebugging: isDebugging,
+            systemBootTime: systemBootTime
         )
     }
 
@@ -139,7 +160,11 @@ extension DeviceInfo {
             osName: .mockRandom(),
             osVersion: .mockRandom(),
             osBuildNumber: .mockRandom(),
-            architecture: .mockRandom()
+            architecture: .mockRandom(),
+            isSimulator: .mockRandom(),
+            vendorId: .mockRandom(),
+            isDebugging: .mockRandom(),
+            systemBootTime: .mockRandom()
         )
     }
 }
@@ -325,7 +350,7 @@ extension TrackingConsent {
 
 extension String {
     public static func mockAnySource() -> String {
-        return ["ios", "android", "browser", "ios", "react-native", "flutter", "unity"].randomElement()!
+        return ["ios", "android", "browser", "ios", "react-native", "flutter", "unity", "kotlin-multiplatform"].randomElement()!
     }
 
     public static func mockAnySourceType() -> String {

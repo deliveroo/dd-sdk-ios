@@ -53,10 +53,7 @@ internal final class DatadogCore {
 
     /// Registry for Features.
     @ReadWriteLock
-    private(set) var stores: [String: (
-        storage: FeatureStorage,
-        upload: FeatureUpload
-    )] = [:]
+    private(set) var stores: [String: (storage: FeatureStorage, upload: FeatureUpload)] = [:]
 
     /// Registry for Features.
     @ReadWriteLock
@@ -67,6 +64,9 @@ internal final class DatadogCore {
 
     /// Flag defining if background tasks are enabled.
     internal let backgroundTasksEnabled: Bool
+
+    /// Flag defining if the SDK is run from an extension.
+    internal let isRunFromExtension: Bool
 
     /// Maximum number of batches per upload.
     internal let maxBatchesPerUpload: Int
@@ -92,7 +92,8 @@ internal final class DatadogCore {
         contextProvider: DatadogContextProvider,
         applicationVersion: String,
         maxBatchesPerUpload: Int,
-        backgroundTasksEnabled: Bool
+        backgroundTasksEnabled: Bool,
+        isRunFromExtension: Bool = false
     ) {
         self.directory = directory
         self.dateProvider = dateProvider
@@ -102,9 +103,9 @@ internal final class DatadogCore {
         self.contextProvider = contextProvider
         self.maxBatchesPerUpload = maxBatchesPerUpload
         self.backgroundTasksEnabled = backgroundTasksEnabled
+        self.isRunFromExtension = isRunFromExtension
         self.applicationVersionPublisher = ApplicationVersionPublisher(version: applicationVersion)
         self.consentPublisher = TrackingConsentPublisher(consent: initialConsent)
-
         self.contextProvider.subscribe(\.userInfo, to: userInfoPublisher)
         self.contextProvider.subscribe(\.version, to: applicationVersionPublisher)
         self.contextProvider.subscribe(\.trackingConsent, to: consentPublisher)
@@ -122,7 +123,7 @@ internal final class DatadogCore {
     /// Sets current user information.
     ///
     /// Those will be added to logs, traces and RUM events automatically.
-    /// 
+    ///
     /// - Parameters:
     ///   - id: User ID, if any
     ///   - name: Name representing the user, if any
@@ -155,11 +156,16 @@ internal final class DatadogCore {
     }
 
     /// Sets the tracking consent regarding the data collection for the Datadog SDK.
-    /// 
+    ///
     /// - Parameter trackingConsent: new consent value, which will be applied for all data collected from now on
     func set(trackingConsent: TrackingConsent) {
         if trackingConsent != consentPublisher.consent {
-            allStorages.forEach { $0.migrateUnauthorizedData(toConsent: trackingConsent) }
+            contextProvider.queue.async { [allStorages] in
+                // RUM-3175: To prevent race conditions with ongoing "event write" operations,
+                // data migration must be synchronized on the context queue. This guarantees that
+                // all latest events have been written before migration occurs.
+                allStorages.forEach { $0.migrateUnauthorizedData(toConsent: trackingConsent) }
+            }
             consentPublisher.consent = trackingConsent
         }
     }
@@ -167,6 +173,7 @@ internal final class DatadogCore {
     /// Clears all data that has not already yet been uploaded Datadog servers.
     func clearAllData() {
         allStorages.forEach { $0.clearAllData() }
+        allDataStores.forEach { $0.clearAllData() }
     }
 
     /// Adds a message receiver to the bus.
@@ -191,6 +198,13 @@ internal final class DatadogCore {
     /// A list of upload units of currently registered Features.
     private var allUploads: [FeatureUpload] {
         stores.values.map { $0.upload }
+    }
+
+    private var allDataStores: [DataStore] {
+        features.values.compactMap { feature in
+            let featureType = type(of: feature) as DatadogFeature.Type
+            return scope(for: featureType).dataStore
+        }
     }
 
     /// Awaits completion of all asynchronous operations, forces uploads (without retrying) and deinitializes
@@ -246,6 +260,7 @@ extension DatadogCore: DatadogCoreProtocol {
                 dateProvider: dateProvider,
                 performance: performancePreset,
                 encryption: encryption,
+                backgroundTasksEnabled: backgroundTasksEnabled,
                 telemetry: telemetry
             )
 
@@ -258,6 +273,7 @@ extension DatadogCore: DatadogCoreProtocol {
                 performance: performancePreset,
                 backgroundTasksEnabled: backgroundTasksEnabled,
                 maxBatchesPerUpload: maxBatchesPerUpload,
+                isRunFromExtension: isRunFromExtension,
                 telemetry: telemetry
             )
 
@@ -286,8 +302,8 @@ extension DatadogCore: DatadogCoreProtocol {
     ///   - name: The Feature's name.
     ///   - type: The Feature instance type.
     /// - Returns: The Feature if any.
-    func get<T>(feature type: T.Type = T.self) -> T? where T: DatadogFeature {
-        features[T.name] as? T
+    func feature<T>(named name: String, type: T.Type) -> T? {
+        features[name] as? T
     }
 
     func scope<Feature>(for featureType: Feature.Type) -> FeatureScope where Feature: DatadogFeature {
@@ -303,7 +319,7 @@ extension DatadogCore: DatadogCoreProtocol {
     }
 }
 
-internal class CoreFeatureScope<Feature>: FeatureScope where Feature: DatadogFeature {
+internal class CoreFeatureScope<Feature>: @unchecked Sendable, FeatureScope where Feature: DatadogFeature {
     private weak var core: DatadogCore?
     private let store: FeatureDataStore
 
@@ -385,11 +401,15 @@ extension DatadogContextProvider {
         ciAppOrigin: String?,
         applicationName: String,
         applicationBundleIdentifier: String,
+        applicationBundleType: BundleType,
         applicationVersion: String,
         sdkInitDate: Date,
         device: DeviceInfo,
+        processInfo: ProcessInfo,
         dateProvider: DateProvider,
-        serverDateProvider: ServerDateProvider
+        serverDateProvider: ServerDateProvider,
+        notificationCenter: NotificationCenter,
+        appStateProvider: AppStateProvider
     ) {
         let context = DatadogContext(
             site: site,
@@ -405,6 +425,7 @@ extension DatadogContextProvider {
             ciAppOrigin: ciAppOrigin,
             applicationName: applicationName,
             applicationBundleIdentifier: applicationBundleIdentifier,
+            applicationBundleType: applicationBundleType,
             sdkInitDate: dateProvider.now,
             device: device,
             nativeSourceOverride: nativeSourceOverride,
@@ -422,28 +443,25 @@ extension DatadogContextProvider {
         subscribe(\.launchTime, to: LaunchTimePublisher())
         #endif
 
-        if #available(iOS 12, tvOS 12, *) {
-            subscribe(\.networkConnectionInfo, to: NWPathMonitorPublisher())
-        } else {
-            assign(reader: SCNetworkReachabilityReader(), to: \.networkConnectionInfo)
-        }
+        subscribe(\.networkConnectionInfo, to: NWPathMonitorPublisher())
+
         #if os(iOS) && !targetEnvironment(macCatalyst) && !(swift(>=5.9) && os(visionOS))
-        if #available(iOS 12, *) {
-            subscribe(\.carrierInfo, to: iOS12CarrierInfoPublisher())
-        } else {
-            assign(reader: iOS11CarrierInfoReader(), to: \.carrierInfo)
-        }
+        subscribe(\.carrierInfo, to: CarrierInfoPublisher())
         #endif
 
         #if os(iOS) && !targetEnvironment(simulator)
-        subscribe(\.batteryStatus, to: BatteryStatusPublisher())
-        subscribe(\.isLowPowerModeEnabled, to: LowPowerModePublisher())
+        subscribe(\.batteryStatus, to: BatteryStatusPublisher(notificationCenter: notificationCenter, device: .current))
+        subscribe(\.isLowPowerModeEnabled, to: LowPowerModePublisher(notificationCenter: notificationCenter, processInfo: processInfo))
         #endif
 
         #if os(iOS) || os(tvOS)
         DispatchQueue.main.async {
             // must be call on the main thread to read `UIApplication.State`
-            let applicationStatePublisher = ApplicationStatePublisher(dateProvider: dateProvider)
+            let applicationStatePublisher = ApplicationStatePublisher(
+                appStateProvider: appStateProvider,
+                notificationCenter: notificationCenter,
+                dateProvider: dateProvider
+            )
             self.subscribe(\.applicationStateHistory, to: applicationStatePublisher)
         }
         #endif
@@ -459,6 +477,9 @@ extension DatadogCore: Flushable {
     func flush() {
         // The order of flushing below must be considered cautiously and
         // follow our design choices around SDK core's threading.
+
+        // Reset baggages that need not be persisted across flushes.
+        set(baggage: nil, forKey: LaunchReport.baggageKey)
 
         let features = features.values.compactMap { $0 as? Flushable }
 
@@ -485,3 +506,23 @@ extension DatadogCore: Flushable {
         }
     }
 }
+
+extension DatadogCore: Storage {
+    /// Returns the most recent modification date of a file in the core directory.
+    /// - Parameter before: The date to compare the last modification date of files.
+    /// - Returns: The latest modified file or `nil` if no files were modified before given date.
+    func mostRecentModifiedFileAt(before: Date) throws -> Date? {
+        try readWriteQueue.sync {
+            let file = try directory.coreDirectory.mostRecentModifiedFile(before: before)
+            return try file?.modifiedAt()
+        }
+    }
+}
+#if SPM_BUILD
+import DatadogPrivate
+#endif
+
+internal let registerObjcExceptionHandlerOnce: () -> Void = {
+    ObjcException.rethrow = __dd_private_ObjcExceptionHandler.rethrow
+    return {}
+}()

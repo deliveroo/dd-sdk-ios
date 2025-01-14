@@ -6,6 +6,7 @@
 
 import Foundation
 
+/// Defines the type of configuration telemetry events supported by the SDK.
 public struct ConfigurationTelemetry: Equatable {
     public let actionNameAttribute: String?
     public let allowFallbackToLocalStorage: Bool?
@@ -16,8 +17,11 @@ public struct ConfigurationTelemetry: Equatable {
     public let batchSize: Int64?
     public let batchUploadFrequency: Int64?
     public let dartVersion: String?
-    public let defaultPrivacyLevel: String?
     public let forwardErrorsToLogs: Bool?
+    public let defaultPrivacyLevel: String?
+    public let textAndInputPrivacyLevel: String?
+    public let imagePrivacyLevel: String?
+    public let touchPrivacyLevel: String?
     public let initializationType: String?
     public let mobileVitalsUpdatePeriod: Int64?
     public let reactNativeVersion: String?
@@ -25,9 +29,11 @@ public struct ConfigurationTelemetry: Equatable {
     public let sessionReplaySampleRate: Int64?
     public let sessionSampleRate: Int64?
     public let silentMultipleInit: Bool?
-    public let startSessionReplayRecordingManually: Bool?
+    public let startRecordingImmediately: Bool?
     public let telemetryConfigurationSampleRate: Int64?
     public let telemetrySampleRate: Int64?
+    public let tracerAPI: String?
+    public let tracerAPIVersion: String?
     public let traceSampleRate: Int64?
     public let trackBackgroundEvents: Bool?
     public let trackCrossPlatformLongTasks: Bool?
@@ -55,11 +61,105 @@ public struct ConfigurationTelemetry: Equatable {
     public let useWorkerUrl: Bool?
 }
 
+/// A telemetry event that can be sampled in addition to the global telemetry sample rate.
+public protocol SampledTelemetry {
+    /// The sample rate for this metric, applied in addition to the telemetry sample rate.
+    var sampleRate: SampleRate { get }
+}
+
+public struct MetricTelemetry: SampledTelemetry {
+    /// The default sample rate for metric events (15%), applied in addition to the telemetry sample rate (20% by default).
+    public static let defaultSampleRate: SampleRate = 15
+
+    /// The name of the metric.
+    public let name: String
+
+    /// The attributes associated with this metric.
+    public let attributes: [String: Encodable]
+
+    /// The sample rate for this metric, applied in addition to the telemetry sample rate.
+    ///
+    /// Must be a value between `0` (reject all) and `100` (keep all).
+    ///
+    /// Note: This sample rate is compounded with the telemetry sample rate. For example, if the telemetry sample rate is 20% (default)
+    /// and this metric's sample rate is 15%, the effective sample rate for this metric will be 3%.
+    ///
+    /// This sample rate is applied in the telemetry receiver, after the metric has been processed by the SDK core (tail-based sampling).
+    public let sampleRate: SampleRate
+}
+
+/// Describes the type of the usage telemetry events supported by the SDK.
+public struct UsageTelemetry: SampledTelemetry {
+    /// Supported usage telemetry events.
+    public enum Event {
+        /// setTrackingConsent API
+        case setTrackingConsent(TrackingConsent)
+        /// stopSession API
+        case stopSession
+        /// startView API
+        case startView
+        /// addAction API
+        case addAction
+        /// addError API
+        case addError
+        /// setGlobalContext, setGlobalContextProperty, addAttribute APIs
+        case setGlobalContext
+        /// setUser, setUserProperty, setUserInfo APIs
+        case setUser
+        /// addFeatureFlagEvaluation API
+        case addFeatureFlagEvaluation
+        /// addFeatureFlagEvaluation API
+        case addViewLoadingTime(ViewLoadingTime)
+
+        /// Describes the properties of `addViewLoadingTime` usage telemetry.
+        public struct ViewLoadingTime {
+            /// Whether the available view is not active
+            public let noActiveView: Bool
+            /// Whether the view is not available
+            public let noView: Bool
+            /// Whether the loading time was overwritten
+            public let overwritten: Bool
+
+            public init(noActiveView: Bool, noView: Bool, overwritten: Bool) {
+                self.noActiveView = noActiveView
+                self.noView = noView
+                self.overwritten = overwritten
+            }
+        }
+    }
+
+    /// The default sample rate for usage telemetry events (15%), applied in addition to the telemetry sample rate (20% by default).
+    public static let defaultSampleRate: SampleRate = 15
+
+    /// The usage telemetry event.
+    public let event: Event
+
+    /// The sample rate for usage event, applied in addition to the telemetry sample rate.
+    ///
+    /// Must be a value between `0` (reject all) and `100` (keep all).
+    ///
+    /// Note: This sample rate is compounded with the telemetry sample rate. For example, if the telemetry sample rate is 20% (default)
+    /// and this event's sample rate is 15%, the effective sample rate for this event will be 3%.
+    ///
+    /// This sample rate is applied in the telemetry receiver, after the event has been processed by the SDK core (tail-based sampling).
+    public let sampleRate: SampleRate
+
+    public init(event: Event, sampleRate: SampleRate = Self.defaultSampleRate) {
+        self.event = event
+        self.sampleRate = sampleRate
+    }
+}
+
+/// Defines different types of telemetry messages supported by the SDK.
 public enum TelemetryMessage {
+    /// A debug log message.
     case debug(id: String, message: String, attributes: [String: Encodable]?)
-    case error(id: String, message: String, kind: String?, stack: String?)
+    /// An execution error.
+    case error(id: String, message: String, kind: String, stack: String)
+    /// A configuration telemetry.
     case configuration(ConfigurationTelemetry)
-    case metric(name: String, attributes: [String: Encodable])
+    case metric(MetricTelemetry)
+    case usage(UsageTelemetry)
 }
 
 /// The `Telemetry` protocol defines methods to collect debug information
@@ -72,38 +172,71 @@ public protocol Telemetry {
 }
 
 public extension Telemetry {
-    /// Starts a method call.
+    /// Starts timing a method call using the "Method Called" metric.
     ///
     /// - Parameters:
-    ///   - operationName: Platform agnostic name of the operation.
-    ///   - callerClass: The name of the class that calls the method.
-    ///   - samplingRate: The sampling rate of the method call. Value between `0.0` and `100.0`, where `0.0` means NO event will be processed and `100.0` means ALL events will be processed. Note that this value is multiplicated by telemetry sampling (by default 20%) and metric events sampling (hardcoded to 15%). Making it effectively 3% sampling rate for sending events, when this value is set to `100`.
+    ///   - operationName: A platform-agnostic name for the operation.
+    ///   - callerClass: The name of the class that invokes the method.
+    ///   - headSampleRate: The sample rate for **head-based** sampling of the method call metric. Must be a value between `0` (reject all) and `100` (keep all).
     ///
-    /// - Returns: A `MethodCalledTrace` instance to be used to stop the method call and measure it's execution time. It can be `nil` if the method call is not sampled.
+    /// Note: The head sample rate is compounded with the tail sample rate, which is configured in `stopMethodCalled()`. Both are applied
+    /// in addition to the telemetry sample rate. For example, if the telemetry sample rate is 20% (default), the head sample rate is 1%, and the tail sample
+    /// rate is 15% (default), the effective sample rate will be 20% x 1% x 15% = 0.03%.
+    ///
+    /// Unlike the telemetry sample rate and tail-based sampling in `stopMethodCalled()`, this sample rate is applied at the start of the method call timing.
+    /// This head-based sampling reduces the impact of processing high-frequency metrics in the SDK core, as most samples can be dropped
+    /// before being passed to the message bus.
+    ///
+    /// - Returns: A `MethodCalledTrace` instance for stopping the method call and measuring its execution time, or `nil` if the method call is not sampled.
     func startMethodCalled(
         operationName: String,
         callerClass: String,
-        samplingRate: Float = 100.0
+        headSampleRate: SampleRate
     ) -> MethodCalledTrace? {
-        if Sampler(samplingRate: samplingRate).sample() {
+        if Sampler(samplingRate: headSampleRate).sample() {
             return MethodCalledTrace(
                 operationName: operationName,
-                callerClass: callerClass
+                callerClass: callerClass,
+                headSampleRate: headSampleRate
             )
         } else {
             return nil
         }
     }
 
-    /// Stops a method call, transforms method call metric to telemetry message,
-    /// and transmits on the message-bus of the core.
+    /// Stops timing a method call and posts a value for the "Method Called" metric.
     ///
-    /// - Parameters
+    /// This method applies tail-based sampling in addition to the head-based sampling applied in `startMethodCalled()`.
+    /// The tail sample rate is compounded with the head sample rate and the telemetry sample rate to determine the effective sample rate.
+    ///
+    /// - Parameters:
     ///   - metric: The `MethodCalledTrace` instance.
-    ///   - isSuccessful: A flag indicating if the method call was successful.
-    func stopMethodCalled(_ metric: MethodCalledTrace?, isSuccessful: Bool = true) {
+    ///   - isSuccessful: A flag indicating whether the method call was successful.
+    ///   - tailSampleRate: The sample rate for **tail-based** sampling of the metric, applied in telemetry receiver after the metric is processed by the SDK core.
+    ///     Defaults to `MetricTelemetry.defaultSampleRate` (15%).
+    func stopMethodCalled(
+        _ metric: MethodCalledTrace?,
+        isSuccessful: Bool = true,
+        tailSampleRate: SampleRate = MetricTelemetry.defaultSampleRate
+    ) {
         if let metric = metric {
-            send(telemetry: metric.asTelemetryMetric(isSuccessful: isSuccessful))
+            let executionTime = -metric.startTime.timeIntervalSinceNow.toInt64Nanoseconds
+            send(
+                telemetry: .metric(
+                    MetricTelemetry(
+                        name: MethodCalledMetric.name,
+                        attributes: [
+                            MethodCalledMetric.executionTime: executionTime,
+                            MethodCalledMetric.operationName: metric.operationName,
+                            MethodCalledMetric.callerClass: metric.callerClass,
+                            MethodCalledMetric.isSuccessful: isSuccessful,
+                            SDKMetricFields.headSampleRate: metric.headSampleRate,
+                            SDKMetricFields.typeKey: MethodCalledMetric.typeValue
+                        ],
+                        sampleRate: tailSampleRate
+                    )
+                )
+            )
         }
     }
 }
@@ -112,24 +245,8 @@ public extension Telemetry {
 public struct MethodCalledTrace {
     let operationName: String
     let callerClass: String
+    let headSampleRate: SampleRate
     let startTime = Date()
-
-    var exectutionTime: Int64 {
-        return -startTime.timeIntervalSinceNow.toInt64Nanoseconds
-    }
-
-    func asTelemetryMetric(isSuccessful: Bool) -> TelemetryMessage {
-        return .metric(
-            name: MethodCalledMetric.name,
-            attributes: [
-                MethodCalledMetric.executionTime: exectutionTime,
-                MethodCalledMetric.operationName: operationName,
-                MethodCalledMetric.callerClass: callerClass,
-                MethodCalledMetric.isSuccessful: isSuccessful,
-                BasicMetric.typeKey: MethodCalledMetric.typeValue
-            ]
-        )
-    }
 }
 
 extension Telemetry {
@@ -150,7 +267,7 @@ extension Telemetry {
     ///   - message: The error message.
     ///   - kind: The kind of error.
     ///   - stack: The stack trace.
-    public func error(id: String, message: String, kind: String?, stack: String?) {
+    public func error(id: String, message: String, kind: String, stack: String) {
         send(telemetry: .error(id: id, message: message, kind: kind, stack: stack))
     }
 
@@ -171,7 +288,7 @@ extension Telemetry {
     ///   - attributes: Custom attributes attached to the log (optional).
     ///   - file: The current file name.
     ///   - line: The line number in file.
-    public func debug(_ message: String, attributes: [String: Encodable]? = nil, file: String = #file, line: Int = #line) {
+    public func debug(_ message: String, attributes: [String: Encodable]? = nil, file: String = #fileID, line: Int = #line) {
         debug(id: "\(file):\(line):\(message)", message: message, attributes: attributes)
     }
 
@@ -179,13 +296,17 @@ extension Telemetry {
     ///
     /// - Parameters:
     ///   - message: The error message.
+    ///   - kind: The kind of error.
     ///   - stack: The stack trace.
     ///   - file: The current file name.
     ///   - line: The line number in file.
-    ///   - file: The current file name.
-    ///   - line: The line number in file.
-    public func error(_ message: String, kind: String? = nil, stack: String? = nil, file: String = #file, line: Int = #line) {
-        error(id: "\(file):\(line):\(message)", message: message, kind: kind, stack: stack)
+    public func error(_ message: String, kind: String? = nil, stack: String? = nil, file: String = #fileID, line: Int = #line) {
+        error(
+            id: "\(file):\(line):\(message)",
+            message: message,
+            kind: kind ?? "\(file)",
+            stack: stack ?? "\(file):\(line)"
+        )
     }
 
     /// Collect execution error.
@@ -194,7 +315,7 @@ extension Telemetry {
     ///   - error: The error.
     ///   - file: The current file name.
     ///   - line: The line number in file.
-    public func error(_ error: DDError, file: String = #file, line: Int = #line) {
+    public func error(_ error: DDError, file: String = #fileID, line: Int = #line) {
         self.error(error.message, kind: error.type, stack: error.stack, file: file, line: line)
     }
 
@@ -205,7 +326,7 @@ extension Telemetry {
     ///   - error: The error.
     ///   - file: The current file name.
     ///   - line: The line number in file.
-    public func error(_ message: String, error: DDError, file: String = #file, line: Int = #line) {
+    public func error(_ message: String, error: DDError, file: String = #fileID, line: Int = #line) {
         self.error("\(message) - \(error.message)", kind: error.type, stack: error.stack, file: file, line: line)
     }
 
@@ -215,7 +336,7 @@ extension Telemetry {
     ///   - error: The error.
     ///   - file: The current file name.
     ///   - line: The line number in file.
-    public func error(_ error: Error, file: String = #file, line: Int = #line) {
+    public func error(_ error: Error, file: String = #fileID, line: Int = #line) {
         self.error(DDError(error: error), file: file, line: line)
     }
 
@@ -226,7 +347,7 @@ extension Telemetry {
     ///   - error: The error.
     ///   - file: The current file name.
     ///   - line: The line number in file.
-    public func error(_ message: String, error: Error, file: String = #file, line: Int = #line) {
+    public func error(_ message: String, error: Error, file: String = #fileID, line: Int = #line) {
         self.error(message, error: DDError(error: error), file: file, line: line)
     }
 
@@ -244,8 +365,11 @@ extension Telemetry {
         batchSize: Int64? = nil,
         batchUploadFrequency: Int64? = nil,
         dartVersion: String? = nil,
-        defaultPrivacyLevel: String? = nil,
         forwardErrorsToLogs: Bool? = nil,
+        defaultPrivacyLevel: String? = nil,
+        textAndInputPrivacyLevel: String? = nil,
+        imagePrivacyLevel: String? = nil,
+        touchPrivacyLevel: String? = nil,
         initializationType: String? = nil,
         mobileVitalsUpdatePeriod: Int64? = nil,
         reactNativeVersion: String? = nil,
@@ -253,9 +377,11 @@ extension Telemetry {
         sessionReplaySampleRate: Int64? = nil,
         sessionSampleRate: Int64? = nil,
         silentMultipleInit: Bool? = nil,
-        startSessionReplayRecordingManually: Bool? = nil,
+        startRecordingImmediately: Bool? = nil,
         telemetryConfigurationSampleRate: Int64? = nil,
         telemetrySampleRate: Int64? = nil,
+        tracerAPI: String? = nil,
+        tracerAPIVersion: String? = nil,
         traceSampleRate: Int64? = nil,
         trackBackgroundEvents: Bool? = nil,
         trackCrossPlatformLongTasks: Bool? = nil,
@@ -292,8 +418,11 @@ extension Telemetry {
             batchSize: batchSize,
             batchUploadFrequency: batchUploadFrequency,
             dartVersion: dartVersion,
-            defaultPrivacyLevel: defaultPrivacyLevel,
             forwardErrorsToLogs: forwardErrorsToLogs,
+            defaultPrivacyLevel: defaultPrivacyLevel,
+            textAndInputPrivacyLevel: textAndInputPrivacyLevel,
+            imagePrivacyLevel: imagePrivacyLevel,
+            touchPrivacyLevel: touchPrivacyLevel,
             initializationType: initializationType,
             mobileVitalsUpdatePeriod: mobileVitalsUpdatePeriod,
             reactNativeVersion: reactNativeVersion,
@@ -301,9 +430,11 @@ extension Telemetry {
             sessionReplaySampleRate: sessionReplaySampleRate,
             sessionSampleRate: sessionSampleRate,
             silentMultipleInit: silentMultipleInit,
-            startSessionReplayRecordingManually: startSessionReplayRecordingManually,
+            startRecordingImmediately: startRecordingImmediately,
             telemetryConfigurationSampleRate: telemetryConfigurationSampleRate,
             telemetrySampleRate: telemetrySampleRate,
+            tracerAPI: tracerAPI,
+            tracerAPIVersion: tracerAPIVersion,
             traceSampleRate: traceSampleRate,
             trackBackgroundEvents: trackBackgroundEvents,
             trackCrossPlatformLongTasks: trackCrossPlatformLongTasks,
@@ -332,16 +463,23 @@ extension Telemetry {
         ))
     }
 
-    /// Collect metric value.
+    /// Collects a metric value.
     ///
-    /// Metrics are reported as debug telemetry. Unlike regular events, they are not subject to duplicates filtering and
-    /// are get sampled with a different rate. Metric attributes are used to create facets for later querying and graphing.
+    /// Metrics are reported as debug telemetry. Unlike regular events, they are not subject to duplicate filtering and
+    /// are sampled at a different rate. Metric attributes are used to create facets for later querying and graphing.
     ///
     /// - Parameters:
-    ///   - name: The name of this metric.
-    ///   - attributes: Parameters associated with this metric.
-    public func metric(name: String, attributes: [String: Encodable]) {
-        send(telemetry: .metric(name: name, attributes: attributes))
+    ///   - name: The name of the metric.
+    ///   - attributes: The attributes associated with this metric.
+    ///   - sampleRate: The sample rate for this metric, applied in addition to the telemetry sample rate (15% by default).
+    ///     Must be a value between `0` (reject all) and `100` (keep all).
+    ///
+    ///     Note: This sample rate is compounded with the telemetry sample rate. For example, if the telemetry sample rate is 20% (default)
+    ///     and this metric's sample rate is 15%, the effective sample rate for this metric will be 3%.
+    ///
+    ///     This sample rate is applied in the telemetry receiver, after the metric has been processed by the SDK core (tail-based sampling).
+    public func metric(name: String, attributes: [String: Encodable], sampleRate: SampleRate = MetricTelemetry.defaultSampleRate) {
+        send(telemetry: .metric(MetricTelemetry(name: name, attributes: attributes, sampleRate: sampleRate)))
     }
 }
 
@@ -385,6 +523,12 @@ extension DatadogCoreProtocol {
     public var telemetry: Telemetry { CoreTelemetry(core: self) }
 }
 
+extension DatadogCoreProtocol {
+    /// Provides access to the `Storage` associated with the core.
+    /// - Returns: The `Storage` instance.
+    public var storage: Storage { CoreStorage(core: self) }
+}
+
 extension ConfigurationTelemetry {
     public func merged(with other: Self) -> Self {
         .init(
@@ -397,8 +541,11 @@ extension ConfigurationTelemetry {
             batchSize: other.batchSize ?? batchSize,
             batchUploadFrequency: other.batchUploadFrequency ?? batchUploadFrequency,
             dartVersion: other.dartVersion ?? dartVersion,
-            defaultPrivacyLevel: other.defaultPrivacyLevel ?? defaultPrivacyLevel,
             forwardErrorsToLogs: other.forwardErrorsToLogs ?? forwardErrorsToLogs,
+            defaultPrivacyLevel: other.defaultPrivacyLevel ?? defaultPrivacyLevel,
+            textAndInputPrivacyLevel: other.textAndInputPrivacyLevel ?? textAndInputPrivacyLevel,
+            imagePrivacyLevel: other.imagePrivacyLevel ?? imagePrivacyLevel,
+            touchPrivacyLevel: other.touchPrivacyLevel ?? touchPrivacyLevel,
             initializationType: other.initializationType ?? initializationType,
             mobileVitalsUpdatePeriod: other.mobileVitalsUpdatePeriod ?? mobileVitalsUpdatePeriod,
             reactNativeVersion: other.reactNativeVersion ?? reactNativeVersion,
@@ -406,9 +553,11 @@ extension ConfigurationTelemetry {
             sessionReplaySampleRate: other.sessionReplaySampleRate ?? sessionReplaySampleRate,
             sessionSampleRate: other.sessionSampleRate ?? sessionSampleRate,
             silentMultipleInit: other.silentMultipleInit ?? silentMultipleInit,
-            startSessionReplayRecordingManually: other.startSessionReplayRecordingManually ?? startSessionReplayRecordingManually,
+            startRecordingImmediately: other.startRecordingImmediately ?? startRecordingImmediately,
             telemetryConfigurationSampleRate: other.telemetryConfigurationSampleRate ?? telemetryConfigurationSampleRate,
             telemetrySampleRate: other.telemetrySampleRate ?? telemetrySampleRate,
+            tracerAPI: other.tracerAPI ?? tracerAPI,
+            tracerAPIVersion: other.tracerAPIVersion ?? tracerAPIVersion,
             traceSampleRate: other.traceSampleRate ?? traceSampleRate,
             trackBackgroundEvents: other.trackBackgroundEvents ?? trackBackgroundEvents,
             trackCrossPlatformLongTasks: other.trackCrossPlatformLongTasks ?? trackCrossPlatformLongTasks,

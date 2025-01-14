@@ -62,11 +62,14 @@ public struct DatadogContext {
     /// The bundle identifier, read from `Info.plist` (`CFBundleIdentifier`).
     public let applicationBundleIdentifier: String
 
+    /// The type of the bundle running the SDK.
+    public let applicationBundleType: BundleType
+
     /// Date of SDK initialization measured in device time (without NTP correction).
     public let sdkInitDate: Date
 
     /// Current device information.
-    public let device: DeviceInfo
+    public var device: DeviceInfo
 
     /// Current user information.
     public var userInfo: UserInfo?
@@ -125,6 +128,7 @@ public struct DatadogContext {
         serverTimeOffset: TimeInterval = .zero,
         applicationName: String,
         applicationBundleIdentifier: String,
+        applicationBundleType: BundleType,
         sdkInitDate: Date,
         device: DeviceInfo,
         nativeSourceOverride: String? = nil,
@@ -152,6 +156,7 @@ public struct DatadogContext {
         self.serverTimeOffset = serverTimeOffset
         self.applicationName = applicationName
         self.applicationBundleIdentifier = applicationBundleIdentifier
+        self.applicationBundleType = applicationBundleType
         self.sdkInitDate = sdkInitDate
         self.device = device
         self.nativeSourceOverride = nativeSourceOverride

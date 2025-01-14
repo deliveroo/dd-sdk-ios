@@ -8,6 +8,13 @@
 import Foundation
 import DatadogInternal
 
+// swiftlint:disable duplicate_imports
+@_exported import enum DatadogInternal.SessionReplayPrivacyLevel
+@_exported import enum DatadogInternal.TextAndInputPrivacyLevel
+@_exported import enum DatadogInternal.ImagePrivacyLevel
+@_exported import enum DatadogInternal.TouchPrivacyLevel
+// swiftlint:enable duplicate_imports
+
 extension SessionReplay {
     /// Session Replay feature configuration.
     public struct Configuration {
@@ -24,24 +31,44 @@ extension SessionReplay {
         /// Defines the way sensitive content (e.g. text) should be masked.
         ///
         /// Default: `.mask`.
-        public var defaultPrivacyLevel: PrivacyLevel
-
-        /// Available privacy levels for content masking.
-        public enum PrivacyLevel: String {
-            /// Record all content.
-            case allow
-
-            /// Mask all content.
-            case mask
-
-            /// Mask input elements, but record all other content.
-            case maskUserInput = "mask_user_input"
+        @available(*, deprecated, message: "This will be removed in future versions of the SDK. Use the new privacy levels instead.")
+        public var defaultPrivacyLevel: SessionReplayPrivacyLevel = .mask {
+            /// Whenever a new `defaultPrivacyLevel` is set, it converts it to the new privacy levels.
+            didSet {
+                let newPrivacyLevels = Self.convertPrivacyLevel(from: defaultPrivacyLevel)
+                self.textAndInputPrivacyLevel = newPrivacyLevels.textAndInputPrivacy
+                self.imagePrivacyLevel = newPrivacyLevels.imagePrivacy
+                self.touchPrivacyLevel = newPrivacyLevels.touchPrivacy
+            }
         }
+
+        /// Defines the way text and input (e.g. textfields, checkboxes) should be masked.
+        ///
+        /// Default: `.maskAll`.
+        public var textAndInputPrivacyLevel: TextAndInputPrivacyLevel
+
+        /// Defines image privacy level.
+        ///
+        /// Default: `.maskAll`.
+        public var imagePrivacyLevel: ImagePrivacyLevel
+
+        /// Defines the way user touches (e.g. tap) should be masked.
+        ///
+        /// Default: `.hide`.
+        public var touchPrivacyLevel: TouchPrivacyLevel
+
+        /// Defines it the recording should start automatically. When `true`, the recording starts automatically; when `false` it doesn't, and the recording will need to be started manually.
+        ///
+        /// Default: `true`.
+        public var startRecordingImmediately: Bool
 
         /// Custom server url for sending replay data.
         ///
         /// Default: `nil`.
         public var customEndpoint: URL?
+
+        /// Feature flags to preview features in Session Replay.
+        public var featureFlags: FeatureFlags
 
         // MARK: - Internal
 
@@ -49,25 +76,121 @@ extension SessionReplay {
 
         internal var _additionalNodeRecorders: [NodeRecorder] = []
 
+        // swiftlint:disable function_default_parameter_at_end
+
         /// Creates Session Replay configuration
         /// - Parameters:
         ///   - replaySampleRate: The sampling rate for Session Replay. It is applied in addition to the RUM session sample rate.
-        ///   - defaultPrivacyLevel: The way sensitive content (e.g. text) should be masked. Default: `.mask`.
+        ///   - textAndInputPrivacyLevel: The way texts and inputs (e.g. label, textfield, checkbox) should be masked. Default: `.maskAll`.
+        ///   - imagePrivacyLevel: The way images should be masked. Default: `.maskAll`.
+        ///   - touchPrivacyLevel: The way user touches (e.g. tap) should be masked. Default: `.hide`.
+        ///   - startRecordingImmediately: If the recording should start automatically. When `true`, the recording starts automatically; when `false` it doesn't, and the recording will need to be started manually. Default: `true`.
         ///   - customEndpoint: Custom server url for sending replay data. Default: `nil`.
+        ///   - featureFlags: Experimental feature flags.
         public init(
-            replaySampleRate: Float,
-            defaultPrivacyLevel: PrivacyLevel = .mask,
+            replaySampleRate: SampleRate = .maxSampleRate,
+            textAndInputPrivacyLevel: TextAndInputPrivacyLevel,
+            imagePrivacyLevel: ImagePrivacyLevel,
+            touchPrivacyLevel: TouchPrivacyLevel,
+            startRecordingImmediately: Bool = true,
+            customEndpoint: URL? = nil,
+            featureFlags: FeatureFlags = .defaults
+        ) {
+            self.replaySampleRate = replaySampleRate
+            self.textAndInputPrivacyLevel = textAndInputPrivacyLevel
+            self.imagePrivacyLevel = imagePrivacyLevel
+            self.touchPrivacyLevel = touchPrivacyLevel
+            self.startRecordingImmediately = startRecordingImmediately
+            self.customEndpoint = customEndpoint
+            self.featureFlags = featureFlags
+        }
+
+        /// Creates Session Replay configuration.
+        /// - Parameters:
+        ///   - replaySampleRate: The sampling rate for Session Replay. It is applied in addition to the RUM session sample rate.
+        ///   - defaultPrivacyLevel: The way sensitive content (e.g. text) should be masked. Default: `.mask`.
+        ///   - startRecordingImmediately: If the recording should start automatically. When `true`, the recording starts automatically; when `false` it doesn't, and the recording will need to be started manually. Default: `true`.
+        ///   - customEndpoint: Custom server url for sending replay data. Default: `nil`.
+        @available(*, deprecated, message: "This will be removed in future versions of the SDK. Use `init(replaySampleRate:textAndInputPrivacyLevel:imagePrivacyLevel:touchPrivacyLevel:)` instead.")
+        public init(
+            replaySampleRate: SampleRate = .maxSampleRate,
+            defaultPrivacyLevel: SessionReplayPrivacyLevel = .mask,
+            startRecordingImmediately: Bool = true,
             customEndpoint: URL? = nil
         ) {
             self.replaySampleRate = replaySampleRate
             self.defaultPrivacyLevel = defaultPrivacyLevel
+            let newPrivacyLevels = Self.convertPrivacyLevel(from: defaultPrivacyLevel)
+            self.textAndInputPrivacyLevel = newPrivacyLevels.textAndInputPrivacy
+            self.imagePrivacyLevel = newPrivacyLevels.imagePrivacy
+            self.touchPrivacyLevel = newPrivacyLevels.touchPrivacy
+            self.startRecordingImmediately = startRecordingImmediately
             self.customEndpoint = customEndpoint
+            self.featureFlags = .defaults
         }
+
+        // swiftlint:enable function_default_parameter_at_end
 
         @_spi(Internal)
         public mutating func setAdditionalNodeRecorders(_ additionalNodeRecorders: [SessionReplayNodeRecorder]) {
             self._additionalNodeRecorders = additionalNodeRecorders
         }
+
+        /// Method to convert deprecated `SessionReplayPrivacyLevel` to the new privacy levels.
+        internal static func convertPrivacyLevel(from oldPrivacyLevel: SessionReplayPrivacyLevel)
+        -> (
+            textAndInputPrivacy: TextAndInputPrivacyLevel,
+            imagePrivacy: ImagePrivacyLevel,
+            touchPrivacy: TouchPrivacyLevel
+        ) {
+            switch oldPrivacyLevel {
+            case .allow:
+                return (
+                    textAndInputPrivacy: .maskSensitiveInputs,
+                    imagePrivacy: .maskNone,
+                    touchPrivacy: .show
+                )
+            case .maskUserInput:
+                return (
+                    textAndInputPrivacy: .maskAllInputs,
+                    imagePrivacy: .maskNonBundledOnly,
+                    touchPrivacy: .hide
+                )
+            case .mask:
+                return (
+                    textAndInputPrivacy: .maskAll,
+                    imagePrivacy: .maskAll,
+                    touchPrivacy: .hide
+                )
+            }
+        }
     }
 }
+
+extension SessionReplay.Configuration {
+    public typealias FeatureFlags = [FeatureFlag: Bool]
+
+    /// Feature Flag available in Session Replay
+    public enum FeatureFlag: String {
+        /// SwiftUI Recording
+        case swiftui
+    }
+}
+
+extension SessionReplay.Configuration.FeatureFlags {
+    /// The defaults Feature Flags applied to Session Replay Configuration
+    public static var defaults: Self {
+        [
+            .swiftui: false
+        ]
+    }
+
+    /// Accesses a feature flag value.
+    ///
+    /// Returns false by default.
+    public subscript(flag: Key) -> Bool {
+        self[flag, default: false]
+    }
+}
+
 #endif

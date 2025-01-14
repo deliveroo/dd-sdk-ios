@@ -10,12 +10,19 @@ import DatadogLogs
 import DatadogTrace
 import DatadogRUM
 import DatadogCrashReporting
+import OpenTelemetryApi
 
 let serviceName = "ios-sdk-example-app"
 
 var logger: LoggerProtocol!
 var tracer: OTTracer { Tracer.shared() }
 var rumMonitor: RUMMonitorProtocol { RUMMonitor.shared() }
+var otelTracer: OpenTelemetryApi.Tracer {
+    OpenTelemetry
+        .instance
+        .tracerProvider
+        .get(instrumentationName: "", instrumentationVersion: nil)
+}
 
 @UIApplicationMain
 class ExampleAppDelegate: UIResponder, UIApplicationDelegate {
@@ -57,6 +64,7 @@ class ExampleAppDelegate: UIResponder, UIApplicationDelegate {
         // Enable Trace
         Trace.enable(
             with: Trace.Configuration(
+                tags: ["testing-tag": "my-value"], 
                 networkInfoEnabled: true,
                 customEndpoint: Environment.readCustomTraceURL()
             )
@@ -70,14 +78,20 @@ class ExampleAppDelegate: UIResponder, UIApplicationDelegate {
                     resourceAttributesProvider: { req, resp, data, err in
                         print("⭐️ [Attributes Provider] data: \(String(describing: data))")
                         return [:]
-            }),
+                    }
+                ),
                 trackBackgroundEvents: true,
+                trackWatchdogTerminations: true,
                 customEndpoint: Environment.readCustomRUMURL(),
                 telemetrySampleRate: 100
             )
         )
         RUMMonitor.shared().debug = true
 
+        // Register Trace Provider
+        OpenTelemetry.registerTracerProvider(
+            tracerProvider: OTelTracerProvider()
+        )
         Logs.addAttribute(forKey: "testing-attribute", value: "my-value")
 
         // Create Logger

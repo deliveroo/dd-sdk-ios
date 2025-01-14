@@ -34,7 +34,7 @@ class DDRUMViewTests: XCTestCase {
     func testItCreatesSwiftRUMView() {
         let objcRUMView = DDRUMView(name: "name", attributes: ["foo": "bar"])
         XCTAssertEqual(objcRUMView.swiftView.name, "name")
-        XCTAssertEqual((objcRUMView.swiftView.attributes["foo"] as? AnyEncodable)?.value as? String, "bar")
+        XCTAssertEqual(objcRUMView.swiftView.attributes["foo"]?.dd.decode(), "bar")
         XCTAssertEqual(objcRUMView.name, "name")
         XCTAssertEqual(objcRUMView.attributes["foo"] as? String, "bar")
     }
@@ -80,7 +80,7 @@ class DDRUMActionTests: XCTestCase {
     func testItCreatesSwiftRUMAction() {
         let objcRUMAction = DDRUMAction(name: "name", attributes: ["foo": "bar"])
         XCTAssertEqual(objcRUMAction.swiftAction.name, "name")
-        XCTAssertEqual((objcRUMAction.swiftAction.attributes["foo"] as? AnyEncodable)?.value as? String, "bar")
+        XCTAssertEqual(objcRUMAction.swiftAction.attributes["foo"]?.dd.decode(), "bar")
         XCTAssertEqual(objcRUMAction.name, "name")
         XCTAssertEqual(objcRUMAction.attributes["foo"] as? String, "bar")
     }
@@ -129,6 +129,9 @@ class DDRUMMethodTests: XCTestCase {
         XCTAssertEqual(DDRUMMethod.put.swiftType, .put)
         XCTAssertEqual(DDRUMMethod.delete.swiftType, .delete)
         XCTAssertEqual(DDRUMMethod.patch.swiftType, .patch)
+        XCTAssertEqual(DDRUMMethod.connect.swiftType, .connect)
+        XCTAssertEqual(DDRUMMethod.trace.swiftType, .trace)
+        XCTAssertEqual(DDRUMMethod.options.swiftType, .options)
     }
 }
 
@@ -158,6 +161,50 @@ class DDRUMMonitorTests: XCTestCase {
     func testWhenSwiftRUMIsEnabled_thenObjcMonitorIsRegistered() {
         RUM.enable(with: config)
         XCTAssertTrue(DDRUMMonitor.shared().swiftRUMMonitor is Monitor)
+    }
+
+    func testProvidingCurrentSessionID() throws {
+        let callSessionIDCallback = expectation(description: "call session ID callback")
+        var currentSessionID: String? = nil
+
+        RUM.enable(with: config)
+        let objcRUMMonitor = DDRUMMonitor.shared()
+        objcRUMMonitor.currentSessionID { sessionID in
+            currentSessionID = sessionID
+            callSessionIDCallback.fulfill()
+        }
+
+        waitForExpectations(timeout: 0.5)
+        let sessionID = try XCTUnwrap(currentSessionID)
+        XCTAssertTrue(sessionID.matches(regex: .uuidRegex))
+    }
+
+    func testStoppingSession() throws {
+        let callSessionIDCallback = expectation(description: "call session ID callback twice")
+        callSessionIDCallback.expectedFulfillmentCount = 2
+        var sessionID1: String? = nil
+        var sessionID2: String? = nil
+
+        // Given
+        RUM.enable(with: config)
+        let objcRUMMonitor = DDRUMMonitor.shared()
+        objcRUMMonitor.currentSessionID { sessionID in
+            sessionID1 = sessionID
+            callSessionIDCallback.fulfill()
+        }
+
+        // When
+        objcRUMMonitor.stopSession()
+        objcRUMMonitor.startView(key: "key", name: "AnyView", attributes: [:])
+
+        // Then
+        objcRUMMonitor.currentSessionID { sessionID in
+            sessionID2 = sessionID
+            callSessionIDCallback.fulfill()
+        }
+
+        waitForExpectations(timeout: 0.5)
+        XCTAssertNotEqual(try XCTUnwrap(sessionID1), try XCTUnwrap(sessionID2))
     }
 
     func testSendingViewEvents() throws {
@@ -390,5 +437,29 @@ class DDRUMMonitorTests: XCTestCase {
         XCTAssertEqual(try viewEvents[0].attribute(forKeyPath: "context.global-attribute1"), "foo1")
         XCTAssertNil(try? viewEvents[0].attribute(forKeyPath: "context.global-attribute2") as String)
         XCTAssertEqual(try viewEvents[0].attribute(forKeyPath: "context.event-attribute1"), "foo1")
+    }
+
+    func testEvaluatingFeatureFlags() throws {
+        RUM.enable(with: config)
+        let objcRUMMonitor = DDRUMMonitor.shared()
+
+        objcRUMMonitor.addFeatureFlagEvaluation(name: "flag1", value: "value1")
+        objcRUMMonitor.addFeatureFlagEvaluation(name: "flag2", value: true)
+
+        let viewEvents = core.waitAndReturnEvents(ofFeature: RUMFeature.name, ofType: RUMViewEvent.self)
+        let lastView = try XCTUnwrap(viewEvents.last)
+        XCTAssertEqual(lastView.featureFlags!.featureFlagsInfo["flag1"] as? AnyEncodable, AnyEncodable("value1"))
+        XCTAssertEqual(lastView.featureFlags!.featureFlagsInfo["flag2"] as? AnyEncodable, AnyEncodable(true))
+    }
+
+    func testChangingDebugFlag() throws {
+        RUM.enable(with: config)
+        let objcRUMMonitor = DDRUMMonitor.shared()
+
+        objcRUMMonitor.debug = true
+        XCTAssertTrue(objcRUMMonitor.swiftRUMMonitor.debug)
+
+        objcRUMMonitor.debug = false
+        XCTAssertFalse(objcRUMMonitor.swiftRUMMonitor.debug)
     }
 }

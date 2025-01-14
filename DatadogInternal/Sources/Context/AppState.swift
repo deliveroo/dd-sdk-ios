@@ -6,6 +6,15 @@
 
 import Foundation
 
+/// A protocol that provides access to the current application state.
+/// See: https://developer.apple.com/documentation/uikit/uiapplication/state
+public protocol AppStateProvider: Sendable {
+    /// The current application state.
+    ///
+    /// **Note**: Must be called on the main thread.
+    var current: AppState { get }
+}
+
 /// Application state.
 public enum AppState: Codable, PassthroughAnyCodable {
     /// The app is running in the foreground and currently receiving events.
@@ -15,13 +24,15 @@ public enum AppState: Codable, PassthroughAnyCodable {
     case inactive
     /// The app is running in the background.
     case background
+    /// The app is terminated.
+    case terminated
 
     /// If the app is running in the foreground - no matter if receiving events or not (i.e. being interrupted because of transitioning from background).
     public var isRunningInForeground: Bool {
         switch self {
         case .active, .inactive:
             return true
-        case .background:
+        case .background, .terminated:
             return false
         }
     }
@@ -140,23 +151,66 @@ extension AppStateHistory {
     }
 }
 
-#if canImport(UIKit)
+#if canImport(WatchKit)
+
+import WatchKit
+
+public struct DefaultAppStateProvider: AppStateProvider {
+    public init() {}
+
+    /// Gets the current application state.
+    ///
+    /// **Note**: Must be called on the main thread.
+    public var current: AppState {
+        let wkState = WKExtension.dd.shared.applicationState
+        return AppState(wkState)
+    }
+}
+
+extension AppState {
+    public init(_ state: WKApplicationState) {
+        switch state {
+        case .active: self = .active
+        case .inactive: self = .inactive
+        case .background: self = .background
+        @unknown default:
+            self = .active // in case a new state is introduced, default to most expected state
+        }
+    }
+}
+
+#elseif canImport(UIKit)
 
 import UIKit
+
+public struct DefaultAppStateProvider: AppStateProvider {
+    public init() {}
+
+    /// Gets the current application state.
+    ///
+    /// **Note**: Must be called on the main thread.
+    public var current: AppState {
+        let uiKitState = UIApplication.dd.managedShared?.applicationState ?? .active // fallback to most expected state
+        return AppState(uiKitState)
+    }
+}
 
 extension AppState {
     public init(_ state: UIApplication.State) {
         switch state {
-        case .active:
-            self = .active
-        case .inactive:
-            self = .inactive
-        case .background:
-            self = .background
-        @unknown default:
-            self = .active // in case a new state is introduced, we rather want to fallback to most expected state
+        case .active: self = .active
+        case .inactive: self = .inactive
+        case .background: self = .background
+        @unknown default: self = .active // in case a new state is introduced, default to most expected state
         }
     }
+}
+
+#else // macOS (no UIKit and no WatchKit)
+
+public struct DefaultAppStateProvider: AppStateProvider {
+    public init() {}
+    public let current: AppState = .active
 }
 
 #endif

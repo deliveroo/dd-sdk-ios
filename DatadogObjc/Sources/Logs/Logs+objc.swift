@@ -62,16 +62,26 @@ public class DDLogsConfiguration: NSObject {
     /// Creates a Logs configuration object.
     ///
     /// - Parameters:
-    ///   - sampleRate: The sampling rate for logging.
     ///   - customEndpoint: Overrides the custom server endpoint where Logs are sent.
     @objc
     public init(
-        sampleRate: Float = 100,
         customEndpoint: URL? = nil
     ) {
         configuration = .init(
             customEndpoint: customEndpoint
         )
+    }
+
+    /// Sets the custom mapper for `DDLogEvent`. This can be used to modify logs before they are send to Datadog.
+    ///
+    /// The implementation should obtain a mutable version of the `DDLogEvent`, modify it and return it. Returning `nil` will result
+    /// with dropping the Log event entirely, so it won't be send to Datadog.
+    @objc
+    public func setEventMapper(_ mapper: @escaping (DDLogEvent) -> DDLogEvent?) {
+        configuration.eventMapper = { swiftEvent in
+            let objcEvent = DDLogEvent(swiftModel: swiftEvent)
+            return mapper(objcEvent)?.swiftModel
+        }
     }
 }
 
@@ -82,6 +92,16 @@ public class DDLogs: NSObject {
         with configuration: DDLogsConfiguration = .init()
     ) {
         Logs.enable(with: configuration.configuration)
+    }
+
+    @objc
+    public static func addAttribute(forKey key: String, value: Any) {
+        Logs.addAttribute(forKey: key, value: AnyEncodable(value))
+    }
+
+    @objc
+    public static func removeAttribute(forKey key: String) {
+        Logs.removeAttribute(forKey: key)
     }
 }
 
@@ -183,7 +203,7 @@ public class DDLoggerConfiguration: NSObject {
         networkInfoEnabled: Bool = false,
         bundleWithRumEnabled: Bool = true,
         bundleWithTraceEnabled: Bool = true,
-        remoteSampleRate: Float = 100,
+        remoteSampleRate: SampleRate = .maxSampleRate,
         remoteLogThreshold: DDLogLevel = .debug,
         printLogsToConsole: Bool = false
     ) {
@@ -217,12 +237,12 @@ public class DDLogger: NSObject {
 
     @objc
     public func debug(_ message: String, attributes: [String: Any]) {
-        sdkLogger.debug(message, attributes: castAttributesToSwift(attributes))
+        sdkLogger.debug(message, attributes: attributes.dd.swiftAttributes)
     }
 
     @objc
     public func debug(_ message: String, error: NSError, attributes: [String: Any]) {
-        sdkLogger.debug(message, error: error, attributes: castAttributesToSwift(attributes))
+        sdkLogger.debug(message, error: error, attributes: attributes.dd.swiftAttributes)
     }
 
     @objc
@@ -232,12 +252,12 @@ public class DDLogger: NSObject {
 
     @objc
     public func info(_ message: String, attributes: [String: Any]) {
-        sdkLogger.info(message, attributes: castAttributesToSwift(attributes))
+        sdkLogger.info(message, attributes: attributes.dd.swiftAttributes)
     }
 
     @objc
     public func info(_ message: String, error: NSError, attributes: [String: Any]) {
-        sdkLogger.info(message, error: error, attributes: castAttributesToSwift(attributes))
+        sdkLogger.info(message, error: error, attributes: attributes.dd.swiftAttributes)
     }
 
     @objc
@@ -247,12 +267,12 @@ public class DDLogger: NSObject {
 
     @objc
     public func notice(_ message: String, attributes: [String: Any]) {
-        sdkLogger.notice(message, attributes: castAttributesToSwift(attributes))
+        sdkLogger.notice(message, attributes: attributes.dd.swiftAttributes)
     }
 
     @objc
     public func notice(_ message: String, error: NSError, attributes: [String: Any]) {
-        sdkLogger.notice(message, error: error, attributes: castAttributesToSwift(attributes))
+        sdkLogger.notice(message, error: error, attributes: attributes.dd.swiftAttributes)
     }
 
     @objc
@@ -262,12 +282,12 @@ public class DDLogger: NSObject {
 
     @objc
     public func warn(_ message: String, attributes: [String: Any]) {
-        sdkLogger.warn(message, attributes: castAttributesToSwift(attributes))
+        sdkLogger.warn(message, attributes: attributes.dd.swiftAttributes)
     }
 
     @objc
     public func warn(_ message: String, error: NSError, attributes: [String: Any]) {
-        sdkLogger.warn(message, error: error, attributes: castAttributesToSwift(attributes))
+        sdkLogger.warn(message, error: error, attributes: attributes.dd.swiftAttributes)
     }
 
     @objc
@@ -277,12 +297,12 @@ public class DDLogger: NSObject {
 
     @objc
     public func error(_ message: String, attributes: [String: Any]) {
-        sdkLogger.error(message, attributes: castAttributesToSwift(attributes))
+        sdkLogger.error(message, attributes: attributes.dd.swiftAttributes)
     }
 
     @objc
     public func error(_ message: String, error: NSError, attributes: [String: Any]) {
-        sdkLogger.error(message, error: error, attributes: castAttributesToSwift(attributes))
+        sdkLogger.error(message, error: error, attributes: attributes.dd.swiftAttributes)
     }
 
     @objc
@@ -292,12 +312,12 @@ public class DDLogger: NSObject {
 
     @objc
     public func critical(_ message: String, attributes: [String: Any]) {
-        sdkLogger.critical(message, attributes: castAttributesToSwift(attributes))
+        sdkLogger.critical(message, attributes: attributes.dd.swiftAttributes)
     }
 
     @objc
     public func critical(_ message: String, error: NSError, attributes: [String: Any]) {
-        sdkLogger.critical(message, error: error, attributes: castAttributesToSwift(attributes))
+        sdkLogger.critical(message, error: error, attributes: attributes.dd.swiftAttributes)
     }
 
     @objc

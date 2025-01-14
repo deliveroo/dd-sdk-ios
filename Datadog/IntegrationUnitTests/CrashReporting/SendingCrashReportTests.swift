@@ -16,9 +16,11 @@ import DatadogInternal
 /// - recording crash context data injected from SDK core and features like RUM.
 private class CrashReporterMock: CrashReportingPlugin {
     @ReadWriteLock
-    internal var pendingCrashReport: DDCrashReport?
+    var pendingCrashReport: DDCrashReport?
     @ReadWriteLock
-    internal var injectedContext: Data? = nil
+    var injectedContext: Data? = nil
+    /// Custom backtrace reporter injected to the plugin.
+    var injectedBacktraceReporter: BacktraceReporting?
 
     init(pendingCrashReport: DDCrashReport? = nil) {
         self.pendingCrashReport = pendingCrashReport
@@ -26,6 +28,7 @@ private class CrashReporterMock: CrashReportingPlugin {
 
     func readPendingCrashReport(completion: (DDCrashReport?) -> Bool) { _ = completion(pendingCrashReport) }
     func inject(context: Data) { injectedContext = context }
+    var backtraceReporter: BacktraceReporting? { injectedBacktraceReporter }
 }
 
 /// Covers broad scenarios of sending Crash Reports.
@@ -45,13 +48,14 @@ class SendingCrashReportTests: XCTestCase {
 
     func testWhenSDKStartsWithPendingCrashReport_itSendsItAsLogAndRUMEvent() throws {
         // Given
-        let crashReport: DDCrashReport = .mockRandomWith(
-            context: .mockWith(
-                trackingConsent: .granted, // CR from the app session that has enabled data collection
-                lastIsAppInForeground: true, // CR occurred while the app was in the foreground
-                lastLogAttributes: .init(mockRandomAttributes())
-            )
+        let crashContext: CrashContext = .mockWith(
+            trackingConsent: .granted, // CR from the app session that has enabled data collection
+            lastIsAppInForeground: true, // CR occurred while the app was in the foreground
+            lastRUMAttributes: GlobalRUMAttributes(attributes: mockRandomAttributes()),
+            lastLogAttributes: .init(mockRandomAttributes())
         )
+        let crashReport: DDCrashReport = .mockRandomWith(context: crashContext)
+        let crashReportAttributes: [String: Encodable] = try XCTUnwrap(crashReport.additionalAttributes.dd.decode())
 
         // When
         Logs.enable(with: .init(), in: core)
@@ -65,7 +69,8 @@ class SendingCrashReportTests: XCTestCase {
         XCTAssertEqual(log.error?.message, crashReport.message)
         XCTAssertEqual(log.error?.kind, crashReport.type)
         XCTAssertEqual(log.error?.stack, crashReport.stack)
-        XCTAssertFalse(log.attributes.userAttributes.isEmpty)
+        let lastLogAttributes: [String: Encodable] = try XCTUnwrap(crashContext.lastLogAttributes.dd.decode())
+        DDAssertJSONEqual(log.attributes.userAttributes, lastLogAttributes.merging(crashReportAttributes) { $1 })
         XCTAssertNotNil(log.attributes.internalAttributes?[DDError.threads])
         XCTAssertNotNil(log.attributes.internalAttributes?[DDError.binaryImages])
         XCTAssertNotNil(log.attributes.internalAttributes?[DDError.meta])
@@ -80,6 +85,9 @@ class SendingCrashReportTests: XCTestCase {
         XCTAssertNotNil(rumEvent.error.binaryImages)
         XCTAssertNotNil(rumEvent.error.meta)
         XCTAssertNotNil(rumEvent.error.wasTruncated)
+        let contextAttributes = try XCTUnwrap(rumEvent.context?.contextInfo)
+        let lastRUMAttributes = try XCTUnwrap(crashContext.lastRUMAttributes?.attributes)
+        DDAssertJSONEqual(contextAttributes, lastRUMAttributes.merging(crashReportAttributes) { $1 })
     }
 
     func testWhenSendingCrashReportAsLog_itIsLinkedToTheRUMSessionThatHasCrashed() throws {

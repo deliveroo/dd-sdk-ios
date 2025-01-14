@@ -4,12 +4,13 @@
  * Copyright 2019-Present Datadog, Inc.
  */
 
+#if os(iOS)
 import XCTest
 @_spi(Internal)
 @testable import DatadogSessionReplay
 
 class UISliderRecorderTests: XCTestCase {
-    private let recorder = UISliderRecorder()
+    private let recorder = UISliderRecorder(identifier: UUID())
     private let slider = UISlider()
     private var viewAttributes: ViewAttributes = .mockAny()
 
@@ -52,3 +53,4 @@ class UISliderRecorderTests: XCTestCase {
         XCTAssertNil(recorder.semantics(of: view, with: viewAttributes, in: .mockAny()))
     }
 }
+#endif

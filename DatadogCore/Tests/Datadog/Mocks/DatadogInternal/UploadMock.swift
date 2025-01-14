@@ -19,17 +19,31 @@ internal class FeatureRequestBuilderMock: FeatureRequestBuilder {
         self.init(factory: { _, _ in request })
     }
 
-    func request(for events: [Event], with context: DatadogContext) throws -> URLRequest {
+    func request(
+        for events: [Event],
+        with context: DatadogContext,
+        execution: ExecutionContext
+    ) throws -> URLRequest {
         return try factory(events, context)
     }
 }
 
 internal class FeatureRequestBuilderSpy: FeatureRequestBuilder {
-    /// Records parameters passed to `requet(for:with:)`
+    /// Stores the parameters passed to the `request(for:with:)` method.
+    @ReadWriteLock
     private(set) var requestParameters: [(events: [Event], context: DatadogContext)] = []
 
-    func request(for events: [Event], with context: DatadogContext) throws -> URLRequest {
+    /// A closure that is called when a request is about to be created in the `request(for:with:)` method.
+    @ReadWriteLock
+    var onRequest: ((_ events: [Event], _ context: DatadogContext) -> Void)?
+
+    func request(
+        for events: [Event],
+        with context: DatadogContext,
+        execution: ExecutionContext
+    ) throws -> URLRequest {
         requestParameters.append((events: events, context: context))
+        onRequest?(events, context)
         return .mockAny()
     }
 }
@@ -37,7 +51,11 @@ internal class FeatureRequestBuilderSpy: FeatureRequestBuilder {
 internal struct FailingRequestBuilderMock: FeatureRequestBuilder {
     let error: Error
 
-    func request(for events: [Event], with context: DatadogContext) throws -> URLRequest {
+    func request(
+        for events: [Event],
+        with context: DatadogContext,
+        execution: ExecutionContext
+    ) throws -> URLRequest {
         throw error
     }
 }

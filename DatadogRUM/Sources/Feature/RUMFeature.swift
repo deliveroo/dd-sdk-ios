@@ -6,6 +6,7 @@
 
 import Foundation
 import DatadogInternal
+import UIKit
 
 internal final class RUMFeature: DatadogRemoteFeature {
     static let name = "rum"
@@ -35,6 +36,31 @@ internal final class RUMFeature: DatadogRemoteFeature {
         )
 
         let featureScope = core.scope(for: RUMFeature.self)
+        let sessionEndedMetric = SessionEndedMetricController(telemetry: core.telemetry)
+
+        var watchdogTermination: WatchdogTerminationMonitor?
+        if configuration.trackWatchdogTerminations {
+            let appStateManager = WatchdogTerminationAppStateManager(
+                featureScope: featureScope,
+                processId: configuration.processID,
+                syntheticsEnvironment: configuration.syntheticsEnvironment
+            )
+            let monitor = WatchdogTerminationMonitor(
+                appStateManager: appStateManager,
+                checker: .init(
+                    appStateManager: appStateManager,
+                    featureScope: featureScope
+                ),
+                storage: core.storage,
+                feature: featureScope,
+                reporter: WatchdogTerminationReporter(
+                    featureScope: featureScope,
+                    dateProvider: configuration.dateProvider
+                )
+            )
+            watchdogTermination = monitor
+        }
+
         let dependencies = RUMScopeDependencies(
             featureScope: featureScope,
             rumApplicationID: configuration.applicationID,
@@ -43,9 +69,9 @@ internal final class RUMFeature: DatadogRemoteFeature {
             trackFrustrations: configuration.trackFrustrations,
             firstPartyHosts: {
                 switch configuration.urlSessionTracking?.firstPartyHostsTracing {
-                case let .trace(hosts, _):
+                case let .trace(hosts, _, _):
                     return FirstPartyHosts(hosts)
-                case let .traceWithHeaders(hostsWithHeaders, _):
+                case let .traceWithHeaders(hostsWithHeaders, _, _):
                     return FirstPartyHosts(hostsWithHeaders)
                 case .none:
                     return nil
@@ -55,6 +81,7 @@ internal final class RUMFeature: DatadogRemoteFeature {
                 eventsMapper: eventsMapper
             ),
             rumUUIDGenerator: configuration.uuidGenerator,
+            backtraceReporter: core.backtraceReporter,
             ciTest: configuration.ciTestExecutionID.map { RUMCITest(testExecutionId: $0) },
             syntheticsTest: {
                 if let testId = configuration.syntheticsTestId, let resultId = configuration.syntheticsResultId {
@@ -70,12 +97,22 @@ internal final class RUMFeature: DatadogRemoteFeature {
                 )
             },
             onSessionStart: configuration.onSessionStart,
-            viewCache: ViewCache()
+            viewCache: ViewCache(dateProvider: configuration.dateProvider),
+            fatalErrorContext: FatalErrorContextNotifier(messageBus: featureScope),
+            sessionEndedMetric: sessionEndedMetric,
+            watchdogTermination: watchdogTermination
         )
 
         self.monitor = Monitor(
             dependencies: dependencies,
             dateProvider: configuration.dateProvider
+        )
+
+        let memoryWarningReporter = MemoryWarningReporter()
+        let memoryWarningMonitor = MemoryWarningMonitor(
+            backtraceReporter: core.backtraceReporter,
+            memoryWarningReporter: memoryWarningReporter,
+            notificationCenter: configuration.notificationCenter
         )
 
         self.instrumentation = RUMInstrumentation(
@@ -88,20 +125,23 @@ internal final class RUMFeature: DatadogRemoteFeature {
             dateProvider: configuration.dateProvider,
             backtraceReporter: core.backtraceReporter,
             fatalErrorContext: dependencies.fatalErrorContext,
-            processID: configuration.processID
+            processID: configuration.processID,
+            notificationCenter: configuration.notificationCenter,
+            watchdogTermination: watchdogTermination,
+            memoryWarningMonitor: memoryWarningMonitor
         )
         self.requestBuilder = RequestBuilder(
             customIntakeURL: configuration.customEndpoint,
             eventsFilter: RUMViewEventsFilter(),
             telemetry: core.telemetry
         )
-        self.messageReceiver = CombinedFeatureMessageReceiver(
+        var messageReceivers: [FeatureMessageReceiver] = [
+            TelemetryInterceptor(sessionEndedMetric: sessionEndedMetric),
             TelemetryReceiver(
                 featureScope: featureScope,
                 dateProvider: configuration.dateProvider,
                 sampler: Sampler(samplingRate: configuration.telemetrySampleRate),
-                configurationExtraSampler: Sampler(samplingRate: configuration.configurationTelemetrySampleRate),
-                metricsExtraSampler: Sampler(samplingRate: configuration.metricsTelemetrySampleRate)
+                configurationExtraSampler: Sampler(samplingRate: configuration.configurationTelemetrySampleRate)
             ),
             ErrorMessageReceiver(
                 featureScope: featureScope,
@@ -130,7 +170,13 @@ internal final class RUMFeature: DatadogRemoteFeature {
                 }(),
                 eventsMapper: eventsMapper
             )
-        )
+        ]
+
+        if let watchdogTermination = watchdogTermination {
+            messageReceivers.append(watchdogTermination)
+        }
+
+        self.messageReceiver = CombinedFeatureMessageReceiver(messageReceivers)
 
         // Forward instrumentation calls to monitor:
         instrumentation.publish(to: monitor)
@@ -159,15 +205,15 @@ extension RUMFeature: Flushable {
     ///
     /// **blocks the caller thread**
     func flush() {
-        monitor.flush()
+        instrumentation.appHangs?.flush()
     }
 }
 
 private extension RUM.Configuration.URLSessionTracking.FirstPartyHostsTracing {
-    var sampleRate: Float {
+    var sampleRate: SampleRate {
         switch self {
-        case .trace(_, let sampleRate): return sampleRate
-        case .traceWithHeaders(_, let sampleRate): return sampleRate
+        case .trace(_, let sampleRate, _): return sampleRate
+        case .traceWithHeaders(_, let sampleRate, _): return sampleRate
         }
     }
 }

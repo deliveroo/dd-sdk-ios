@@ -64,7 +64,8 @@ public enum Logs {
             logEventMapper: logEventMapper,
             dateProvider: configuration.dateProvider,
             customIntakeURL: configuration.customEndpoint,
-            telemetry: core.telemetry
+            telemetry: core.telemetry,
+            backtraceReporter: core.backtraceReporter
         )
 
         do {
@@ -84,7 +85,7 @@ public enum Logs {
         guard let feature = core.get(feature: LogsFeature.self) else {
             return
         }
-        feature.addAttribute(forKey: key, value: value)
+        feature.attributes.addAttribute(key: key, value: value)
         sendAttributesChanged(for: feature, in: core)
     }
 
@@ -98,7 +99,7 @@ public enum Logs {
         guard let feature = core.get(feature: LogsFeature.self) else {
             return
         }
-        feature.removeAttribute(forKey: key)
+        feature.attributes.removeAttribute(forKey: key)
         sendAttributesChanged(for: feature, in: core)
     }
 
@@ -106,7 +107,7 @@ public enum Logs {
         core.send(
             message: .baggage(
                 key: GlobalLogAttributes.key,
-                value: GlobalLogAttributes(attributes: feature.getAttributes())
+                value: GlobalLogAttributes(attributes: feature.attributes.getAttributes())
             )
         )
     }

@@ -34,16 +34,13 @@ public class HTTPHeadersWriter: TracePropagationHeadersWriter {
     ///
     public private(set) var traceHeaderFields: [String: String] = [:]
 
-    /// The tracing sampler.
-    ///
-    /// This value will decide of the `x-datadog-sampling-priority` header field value
-    /// and if `x-datadog-trace-id` and `x-datadog-parent-id` are propagated.
-    private let sampler: Sampler
+    private let samplingStrategy: TraceSamplingStrategy
+    private let traceContextInjection: TraceContextInjection
 
     /// Initializes the headers writer.
     ///
     /// - Parameter samplingRate: The sampling rate applied for headers injection.
-    @available(*, deprecated, message: "This will be removed in future versions of the SDK. Use `init(sampleRate:)` instead.")
+    @available(*, deprecated, message: "This will be removed in future versions of the SDK. Use `init(samplingStrategy: .custom(sampleRate:))` instead.")
     public convenience init(samplingRate: Float) {
         self.init(sampleRate: samplingRate)
     }
@@ -51,15 +48,21 @@ public class HTTPHeadersWriter: TracePropagationHeadersWriter {
     /// Initializes the headers writer.
     ///
     /// - Parameter sampleRate: The sampling rate applied for headers injection, with 20% as the default.
+    @available(*, deprecated, message: "This will be removed in future versions of the SDK. Use `init(samplingStrategy: .custom(sampleRate:))` instead.")
     public convenience init(sampleRate: Float = 20) {
-        self.init(sampler: Sampler(samplingRate: sampleRate))
+        self.init(samplingStrategy: .custom(sampleRate: sampleRate), traceContextInjection: .all)
     }
 
     /// Initializes the headers writer.
     ///
-    /// - Parameter sampler: The sampler used for headers injection.
-    public init(sampler: Sampler) {
-        self.sampler = sampler
+    /// - Parameter samplingStrategy: The strategy for sampling trace propagation headers.
+    /// - Parameter traceContextInjection: The strategy for injecting trace context into requests.
+    public init(
+        samplingStrategy: TraceSamplingStrategy,
+        traceContextInjection: TraceContextInjection
+    ) {
+        self.samplingStrategy = samplingStrategy
+        self.traceContextInjection = traceContextInjection
     }
 
     /// Writes the trace ID, span ID, and optional parent span ID into the trace propagation headers.
@@ -67,17 +70,20 @@ public class HTTPHeadersWriter: TracePropagationHeadersWriter {
     /// - Parameter traceID: The trace ID.
     /// - Parameter spanID: The span ID.
     /// - Parameter parentSpanID: The parent span ID, if applicable.
-    public func write(traceID: TraceID, spanID: SpanID, parentSpanID: SpanID?) {
-        let samplingPriority = sampler.sample()
+    public func write(traceContext: TraceContext) {
+        let sampler = samplingStrategy.sampler(for: traceContext)
+        let sampled = sampler.sample()
 
-        traceHeaderFields = [
-            TracingHTTPHeaders.samplingPriorityField: samplingPriority ? "1" : "0"
-        ]
-
-        if samplingPriority {
-            traceHeaderFields[TracingHTTPHeaders.traceIDField] = traceID.idLoHex
-            traceHeaderFields[TracingHTTPHeaders.parentSpanIDField] = String(spanID, representation: .hexadecimal)
-            traceHeaderFields[TracingHTTPHeaders.tagsField] = "_dd.p.tid=\(traceID.idHiHex)"
+        switch (traceContextInjection, sampled) {
+        case (.all, _), (.sampled, true):
+            traceHeaderFields = [
+                TracingHTTPHeaders.samplingPriorityField: sampled ? "1" : "0"
+            ]
+            traceHeaderFields[TracingHTTPHeaders.traceIDField] = String(traceContext.traceID.idLo)
+            traceHeaderFields[TracingHTTPHeaders.parentSpanIDField] = String(traceContext.spanID, representation: .decimal)
+            traceHeaderFields[TracingHTTPHeaders.tagsField] = "_dd.p.tid=\(traceContext.traceID.idHiHex)"
+        case (.sampled, false):
+            break
         }
     }
 }

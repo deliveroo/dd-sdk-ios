@@ -11,8 +11,7 @@ import Foundation
 ///
 /// Any reference to `DatadogCoreProtocol` must be captured as `weak` within a Feature. This is to avoid
 /// retain cycle of core holding the Feature and vice-versa.
-public protocol DatadogCoreProtocol: AnyObject, MessageSending, BaggageSharing {
-    // TODO: RUM-3717 
+public protocol DatadogCoreProtocol: AnyObject, MessageSending, BaggageSharing, Storage {
     // Remove `DatadogCoreProtocol` conformance to `MessageSending` and `BaggageSharing` once
     // all features are migrated to depend on `FeatureScope` interface.
 
@@ -38,7 +37,7 @@ public protocol DatadogCoreProtocol: AnyObject, MessageSending, BaggageSharing {
     ///   - name: The Feature's name.
     ///   - type: The Feature instance type.
     /// - Returns: The Feature if any.
-    func get<T>(feature type: T.Type) -> T? where T: DatadogFeature
+    func feature<T>(named name: String, type: T.Type) -> T?
 
     /// Retrieves a Feature Scope for given feature type.
     ///
@@ -84,7 +83,7 @@ public protocol BaggageSharing {
     ///     // Bar.swift
     ///     core.scope(for: "bar").eventWriteContext { context, writer in
     ///         if let baggage = context.baggages["key"] {
-    ///             try {
+    ///             do {
     ///                 // Try decoding context to expected type:
     ///                 let value: String = try baggage.decode()
     ///                 // If success, handle the `value`.
@@ -98,6 +97,17 @@ public protocol BaggageSharing {
     ///   - baggage: The Feature's baggage to set.
     ///   - key: The baggage's key.
     func set(baggage: @escaping () -> FeatureBaggage?, forKey key: String)
+}
+
+extension DatadogCoreProtocol {
+    /// Returns a `DatadogFeature` conforming type from the
+    /// Feature registry.
+    ///
+    /// - Parameter type: The Feature instance type.
+    /// - Returns: The Feature if any.
+    public func get<T>(feature type: T.Type = T.self) -> T? where T: DatadogFeature {
+        feature(named: T.name, type: type)
+    }
 }
 
 extension MessageSending {
@@ -212,7 +222,7 @@ extension BaggageSharing {
 }
 
 /// Feature scope provides a context and a writer to build a record event.
-public protocol FeatureScope: MessageSending, BaggageSharing {
+public protocol FeatureScope: MessageSending, BaggageSharing, Sendable {
     /// Retrieve the core context and event writer.
     ///
     /// The Feature scope provides the current Datadog context and event writer for building and recording events.
@@ -290,13 +300,15 @@ public class NOPDatadogCore: DatadogCoreProtocol {
     /// no-op
     public func register<T>(feature: T) throws where T: DatadogFeature { }
     /// no-op
-    public func get<T>(feature type: T.Type) -> T? where T: DatadogFeature { nil }
+    public func feature<T>(named name: String, type: T.Type) -> T? { nil }
     /// no-op
     public func scope<T>(for featureType: T.Type) -> FeatureScope { NOPFeatureScope() }
     /// no-op
     public func set(baggage: @escaping () -> FeatureBaggage?, forKey key: String) { }
     /// no-op
     public func send(message: FeatureMessage, else fallback: @escaping () -> Void) { }
+    /// no-op
+    public func mostRecentModifiedFileAt(before: Date) throws -> Date? { return nil }
 }
 
 public struct NOPFeatureScope: FeatureScope {

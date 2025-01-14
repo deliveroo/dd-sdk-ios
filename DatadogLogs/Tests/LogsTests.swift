@@ -39,6 +39,18 @@ class LogsTests: XCTestCase {
         XCTAssertTrue(Logs._internal.isEnabled(in: core))
     }
 
+    func testInitializedWithBacktraceReporter() throws {
+        // Given
+        let core = FeatureRegistrationCoreMock()
+
+        // When
+        Logs.enable(in: core)
+
+        // Then
+        let logs = try XCTUnwrap(core.get(feature: LogsFeature.self))
+        XCTAssertNotNil(logs.backtraceReporter)
+    }
+
     func testConfigurationOverrides() throws {
         // Given
         let customEndpoint: URL = .mockRandom()
@@ -94,7 +106,7 @@ class LogsTests: XCTestCase {
 
         // Then
         let feature = try XCTUnwrap(core.get(feature: LogsFeature.self))
-        XCTAssertEqual(feature.getAttributes()[attributeKey] as? String, attributeValue)
+        XCTAssertEqual(feature.attributes.getAttributes()[attributeKey] as? String, attributeValue)
     }
 
     func testLogsRemoveAttributeForwardedToFeature() throws {
@@ -111,7 +123,7 @@ class LogsTests: XCTestCase {
 
         // Then
         let feature = try XCTUnwrap(core.get(feature: LogsFeature.self))
-        XCTAssertNil(feature.getAttributes()[attributeKey])
+        XCTAssertNil(feature.attributes.getAttributes()[attributeKey])
     }
 
     func testItSendsGlobalLogUpdates_whenAddAttribute() throws {
@@ -136,7 +148,7 @@ class LogsTests: XCTestCase {
         XCTAssertEqual((baggage.attributes[attributeKey] as? AnyCodable)?.value as? String, attributeValue)
     }
 
-    func testItSendsGlobalLogUpdates_whenRemovettribute() throws {
+    func testItSendsGlobalLogUpdates_whenRemoveAttribute() throws {
         // Given
         let mockMessageReciever = FeatureMessageReceiverMock()
         let core = SingleFeatureCoreMock<LogsFeature>(

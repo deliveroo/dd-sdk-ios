@@ -40,13 +40,11 @@ class DDLogsTests: XCTestCase {
 
     func testConfigurationOverrides() throws {
         // Given
-        let sampleRate: Float = .random(in: 0...100)
         let customEndpoint: URL = .mockRandom()
 
         // When
         DDLogs.enable(
             with: DDLogsConfiguration(
-                sampleRate: sampleRate,
                 customEndpoint: customEndpoint
             )
         )
@@ -55,6 +53,61 @@ class DDLogsTests: XCTestCase {
         let logs = try XCTUnwrap(core.get(feature: LogsFeature.self))
         let requestBuilder = try XCTUnwrap(logs.requestBuilder as? RequestBuilder)
         XCTAssertEqual(requestBuilder.customIntakeURL, customEndpoint)
+    }
+
+    func testAddGlobalAttributes() throws {
+        // Given
+        DDLogs.enable()
+
+        DDLogs.addAttribute(forKey: "nsstring", value: NSString(string: "hello"))
+        DDLogs.addAttribute(forKey: "nsbool", value: NSNumber(booleanLiteral: true))
+        DDLogs.addAttribute(forKey: "nsint", value: NSInteger(integerLiteral: 10))
+        DDLogs.addAttribute(forKey: "nsnumber", value: NSNumber(value: 10.5))
+        DDLogs.addAttribute(forKey: "nsnull", value: NSNull())
+        DDLogs.addAttribute(forKey: "nsurl", value: NSURL(string: "http://apple.com")!)
+        DDLogs.addAttribute(
+            forKey: "nsarray-of-int",
+            value: NSArray(array: [1, 2, 3])
+        )
+        DDLogs.addAttribute(
+            forKey: "nsdictionary-of-date",
+            value: NSDictionary(dictionary: [
+                "date1": Date.mockDecember15th2019At10AMUTC(),
+                "date2": Date.mockDecember15th2019At10AMUTC(addingTimeInterval: 60 * 60)
+            ])
+        )
+
+        // When
+        let objcLogger = DDLogger.create()
+        objcLogger.info("message")
+
+        // Then
+        let logMatcher = try core.waitAndReturnLogMatchers()[0]
+        logMatcher.assertValue(forKey: "nsstring", equals: "hello")
+        logMatcher.assertValue(forKey: "nsbool", equals: true)
+        logMatcher.assertValue(forKey: "nsint", equals: 10)
+        logMatcher.assertValue(forKey: "nsnumber", equals: 10.5)
+        logMatcher.assertValue(forKeyPath: "nsnull", isTypeOf: Optional<Any>.self)
+        logMatcher.assertValue(forKey: "nsurl", equals: "http://apple.com")
+        logMatcher.assertValue(forKey: "nsarray-of-int", equals: [1, 2, 3])
+        logMatcher.assertValue(forKeyPath: "nsdictionary-of-date.date1", equals: "2019-12-15T10:00:00.000Z")
+        logMatcher.assertValue(forKeyPath: "nsdictionary-of-date.date2", equals: "2019-12-15T11:00:00.000Z")
+    }
+
+    func testRemoveGlobalAttributes() throws {
+        // Given
+        DDLogs.enable()
+
+        DDLogs.addAttribute(forKey: "custom-attribute", value: NSString(string: "custom-value"))
+        DDLogs.removeAttribute(forKey: "custom-attribute")
+
+        // When
+        let objcLogger = DDLogger.create()
+        objcLogger.info("message")
+
+        // Then
+        let logMatcher = try core.waitAndReturnLogMatchers()[0]
+        logMatcher.assertNoValue(forKey: "custom-attribute")
     }
 
     func testSendingLogsWithDifferentLevels() throws {
@@ -217,6 +270,24 @@ class DDLogsTests: XCTestCase {
         XCTAssertTrue(objcConfig.configuration.networkInfoEnabled)
         XCTAssertEqual(objcConfig.configuration.remoteSampleRate, 50)
         XCTAssertNotNil(objcConfig.configuration.consoleLogFormat)
+    }
+
+    func testEventMapping() throws {
+        let logsConfiguration = DDLogsConfiguration()
+        logsConfiguration.setEventMapper { logEvent in
+            logEvent.message = "custom-log-message"
+            logEvent.attributes.userAttributes["custom-attribute"] = "custom-value"
+            return logEvent
+        }
+        DDLogs.enable(with: logsConfiguration)
+
+        let objcLogger = DDLogger.create()
+
+        objcLogger.debug("message")
+
+        let logMatchers = try core.waitAndReturnLogMatchers()
+        logMatchers[0].assertMessage(equals: "custom-log-message")
+        logMatchers[0].assertAttributes(equal: ["custom-attribute": "custom-value"])
     }
 }
 // swiftlint:enable multiline_arguments_brackets

@@ -7,12 +7,12 @@
 import Foundation
 import DatadogInternal
 
-public class FeatureScopeMock: FeatureScope {
+public final class FeatureScopeMock: FeatureScope, @unchecked Sendable {
     private struct EventWriterMock: Writer {
         weak var scope: FeatureScopeMock?
         let bypassConsent: Bool
 
-        func write<T, M>(value: T, metadata: M?) where T : Encodable, M : Encodable {
+        func write<T, M>(value: T, metadata: M?) where T: Encodable, M: Encodable {
             scope?.events.append((value, metadata, bypassConsent))
         }
     }
@@ -58,10 +58,17 @@ public class FeatureScopeMock: FeatureScope {
         return events.compactMap { $0.event as? T }
     }
 
+    // swiftlint:disable function_default_parameter_at_end
+
     /// Retrieve typed events written through Even Write Context API with given `bypassConsent` flag.
-    public func eventsWritten<T>(ofType type: T.Type = T.self, withBypassConsent bypassConsent: Bool) -> [T] where T: Encodable {
+    public func eventsWritten<T>(
+        ofType type: T.Type = T.self,
+        withBypassConsent bypassConsent: Bool
+    ) -> [T] where T: Encodable {
         return events.filter { $0.bypassConsent == bypassConsent }.compactMap { $0.event as? T }
     }
+
+    // swiftlint:enable function_default_parameter_at_end
 
     /// Retrieve data written in Data Store.
     public let dataStoreMock = DataStoreMock()

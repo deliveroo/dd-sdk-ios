@@ -4,6 +4,7 @@
  * Copyright 2019-Present Datadog, Inc.
  */
 
+#if os(iOS)
 import XCTest
 @testable import DatadogSessionReplay
 @testable import TestUtilities
@@ -35,7 +36,7 @@ class QueueTests: XCTestCase {
         let randomValue: Int = .mockRandom()
 
         // Given
-        let queue = BackgroundAsyncQueue(named: .mockAny())
+        let queue = BackgroundAsyncQueue(label: .mockAny())
 
         // When
         var value = randomValue
@@ -51,3 +52,4 @@ class QueueTests: XCTestCase {
         XCTAssertNotEqual(value, randomValue)
     }
 }
+#endif
