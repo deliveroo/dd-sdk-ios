@@ -14,7 +14,6 @@ import DatadogCrashReporting
 #if os(iOS)
 import DatadogSessionReplay
 #endif
-import OpenTelemetryApi
 
 internal class ViewController: UIViewController {
     private var logger: LoggerProtocol! // swiftlint:disable:this implicitly_unwrapped_optional

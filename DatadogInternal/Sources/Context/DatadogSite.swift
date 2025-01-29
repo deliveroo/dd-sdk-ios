@@ -25,6 +25,12 @@ public enum DatadogSite: String {
     /// US based servers, FedRAMP compatible.
     /// Sends data to [app.ddog-gov.com](https://app.ddog-gov.com/).
     case us1_fed
+    /// Deliveroo OTel based collector
+    /// Sends data to [apps-telemetry-staging.deliveroo.net](https://apps-telemetry-staging.deliveroo.net/).
+    case deliverooStaging
+    /// Deliveroo OTel based collector
+    /// Sends data to [apps-telemetry.deliveroo.com](https://apps-telemetry.deliveroo.com/).
+    case deliveroo
     /// US based servers.
     /// Sends data to [app.datadoghq.com](https://app.datadoghq.com/).
     @available(*, deprecated, message: "Renamed to us1")
@@ -49,6 +55,8 @@ extension DatadogSite {
         case .eu1: return URL(string: "https://browser-intake-datadoghq.eu/")!
         case .ap1: return URL(string: "https://browser-intake-ap1-datadoghq.com/")!
         case .us1_fed: return URL(string: "https://browser-intake-ddog-gov.com/")!
+        case .deliveroo: return URL(string: "https://apps-telemetry.deliveroo.com/")!
+        case .deliverooStaging: return URL(string: "https://apps-telemetry-staging.deliveroo.net/")!
         // swiftlint:enable force_unwrapping
         }
     }

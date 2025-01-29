@@ -10,19 +10,12 @@ import DatadogLogs
 import DatadogTrace
 import DatadogRUM
 import DatadogCrashReporting
-import OpenTelemetryApi
 
 let serviceName = "ios-sdk-example-app"
 
 var logger: LoggerProtocol!
 var tracer: OTTracer { Tracer.shared() }
 var rumMonitor: RUMMonitorProtocol { RUMMonitor.shared() }
-var otelTracer: OpenTelemetryApi.Tracer {
-    OpenTelemetry
-        .instance
-        .tracerProvider
-        .get(instrumentationName: "", instrumentationVersion: nil)
-}
 
 @UIApplicationMain
 class ExampleAppDelegate: UIResponder, UIApplicationDelegate {

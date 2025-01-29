@@ -6,9 +6,8 @@
 
 import Foundation
 import DatadogInternal
-import OpenTelemetryApi
 
-internal final class DatadogTracer: OTTracer, OpenTelemetryApi.Tracer {
+internal final class DatadogTracer: OTTracer {
     /// Trace feature scope.
     let featureScope: FeatureScope
 
@@ -176,19 +175,6 @@ internal final class DatadogTracer: OTTracer, OpenTelemetryApi.Tracer {
                 )
             },
             forKey: SpanCoreContext.key
-        )
-    }
-    // MARK: - OpenTelemetry
-
-    func spanBuilder(spanName: String) -> OpenTelemetryApi.SpanBuilder {
-        OTelSpanBuilder(
-            active: false,
-            attributes: [:],
-            parent: .currentSpan,
-            spanKind: .internal,
-            spanName: spanName,
-            startTime: nil,
-            tracer: self
         )
     }
 }

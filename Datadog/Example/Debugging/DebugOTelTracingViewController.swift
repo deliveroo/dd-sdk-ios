@@ -7,7 +7,6 @@
 import UIKit
 import DatadogCore
 import DatadogTrace
-import OpenTelemetryApi
 
 class DebugOTelTracingViewController: UIViewController {
     @IBOutlet weak var serviceNameTextField: UITextField!

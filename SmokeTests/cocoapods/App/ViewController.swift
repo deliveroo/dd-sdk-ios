@@ -14,7 +14,6 @@ import DatadogCrashReporting
 import DatadogSessionReplay  // it should compile for iOS and tvOS, but APIs are only available on iOS
 import DatadogObjc
 import Alamofire
-import OpenTelemetryApi
 
 internal class ViewController: UIViewController {
     private var logger: LoggerProtocol! // swiftlint:disable:this implicitly_unwrapped_optional
